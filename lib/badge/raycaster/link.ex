@@ -25,7 +25,7 @@ defmodule Badge.Raycaster.Link do
   alias Badge.Raycaster.Room
   alias Badge.Wifi
 
-  @default_url "wss://goatmire-relay.fly.dev"
+  @default_url "wss://evilgoat-relay.fly.dev"
 
   # The token the relay asks for, when there is no `raycaster_token` key: read while
   # compiling, like the secret the update link has built in. It ends up in the image,
