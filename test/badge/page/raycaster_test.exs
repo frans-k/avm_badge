@@ -25,7 +25,18 @@ defmodule Badge.Page.RaycasterTest do
       grid = Elixir.Raycaster.Engine.grid()
       start = %{x: 11 * 256 + 128, y: 9 * 256 + 128, a: 0}
 
-      for label <- [~c"Up", ~c"W", ~c"Down", ~c"S", ~c"Q", ~c"E", ~c"Left", ~c"A", ~c"Right", ~c"D"] do
+      for label <- [
+            ~c"Up",
+            ~c"W",
+            ~c"Down",
+            ~c"S",
+            ~c"Q",
+            ~c"E",
+            ~c"Left",
+            ~c"A",
+            ~c"Right",
+            ~c"D"
+          ] do
         refute Elixir.Raycaster.Engine.step(grid, start, [label], 200) == start
       end
     end
@@ -56,7 +67,69 @@ defmodule Badge.Page.RaycasterTest do
 
       # Only the floor and ceiling span the panel, and together they fill the view only.
       assert length(rects) == 2
-      assert rects |> Enum.map(fn {_y, h} -> h end) |> Enum.sum() == Theme.height() - Theme.content_top()
+
+      assert rects |> Enum.map(fn {_y, h} -> h end) |> Enum.sum() ==
+               Theme.height() - Theme.content_top()
+    end
+  end
+
+  describe "other players" do
+    @figure {900, 300, 0xE0433A}
+
+    defp with_others(others),
+      do: elem(Raycaster.handle_info({:raycaster, {:players, others}}, Raycaster.init()), 1)
+
+    test "offline until the relay puts the badge in a room" do
+      assert Enum.any?(
+               Raycaster.render(Raycaster.init()),
+               &match?({:text, _, _, _, _, _, "offline"}, &1)
+             )
+    end
+
+    test "the line says how many are playing, counting this badge" do
+      up = elem(Raycaster.handle_info({:raycaster, :up}, Raycaster.init()), 1)
+
+      assert Enum.any?(
+               Raycaster.render(up),
+               &match?({:text, _, _, _, _, _, "online, 1 playing"}, &1)
+             )
+
+      two = %{up | others: [@figure]}
+
+      assert Enum.any?(
+               Raycaster.render(two),
+               &match?({:text, _, _, _, _, _, "online, 2 playing"}, &1)
+             )
+    end
+
+    test "the snapshot replaces who is around, and losing the link empties it" do
+      state = with_others([@figure])
+
+      assert %{others: [@figure]} = state
+      assert {:ok, %{others: []}} = Raycaster.handle_info({:raycaster, {:players, []}}, state)
+      assert {:ok, %{others: [], link: :off}} = Raycaster.handle_info({:raycaster, :down}, state)
+    end
+
+    test "the link coming up makes the page say where it is at once" do
+      state = %{Raycaster.init() | sent: 12_345}
+
+      assert {:ok, %{link: :up, sent: nil}} = Raycaster.handle_info({:raycaster, :up}, state)
+    end
+
+    test "a figure in view is drawn in front of the walls" do
+      # The spawn point faces east along row 1, so someone four cells ahead is in view.
+      ahead = {384 + 4 * 256, 384, 0xE0433A}
+      without = Raycaster.render(Raycaster.init())
+      with_figure = Raycaster.render(with_others([ahead]))
+
+      # The status line, then a head and a body, then exactly what was there before.
+      assert length(with_figure) == length(without) + 2
+      assert Enum.drop(with_figure, 3) == Enum.drop(without, 1)
+    end
+
+    test "a message it does not know is ignored" do
+      assert Raycaster.handle_info(:nonsense, Raycaster.init()) == :ignore
+      assert Raycaster.handle_info({:raycaster, :sideways}, Raycaster.init()) == :ignore
     end
   end
 

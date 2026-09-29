@@ -51,6 +51,7 @@ defmodule Badge do
       {Badge.Power, :ok},
       {Badge.Ir.Link, :ok},
       {Badge.Chat.Link, :ok},
+      {Badge.Raycaster.Link, :ok},
       {Badge.Update.Link, :ok},
       {Badge.Cluster.Link, :ok},
       {Badge.Schedule.Link, :ok}

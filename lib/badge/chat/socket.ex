@@ -42,17 +42,20 @@ defmodule Badge.Chat.Socket do
   def base_url(""), do: @default_url
   def base_url(url), do: url
 
-  @doc "Where to connect, carrying the serializer version and who is asking."
-  @spec url(binary, binary, binary) :: binary
-  def url(base, chip, name) do
-    trim(base) <> @path <> "?" <> query([{"vsn", @vsn}, {"chip", chip}, {"name", name}])
+  @doc """
+  Where to connect, carrying the serializer version and who is asking, and any
+  `extra` `{key, value}` pairs, such as a token.
+  """
+  @spec url(binary, binary, binary, [{binary, binary}]) :: binary
+  def url(base, chip, name, extra \\ []) do
+    trim(base) <> @path <> "?" <> query([{"vsn", @vsn}, {"chip", chip}, {"name", name} | extra])
   end
 
   @doc "Everything the driver is handed, so the transport choice can be read off."
-  @spec opts(binary, binary, binary) :: map
-  def opts(base, chip, name) do
+  @spec opts(binary, binary, binary, [{binary, binary}]) :: map
+  def opts(base, chip, name, extra \\ []) do
     %{
-      url: url(base, chip, name),
+      url: url(base, chip, name, extra),
       owner: self(),
       # Without an explicit verify the driver disables verification and warns.
       verify: verify(base),
@@ -66,9 +69,9 @@ defmodule Badge.Chat.Socket do
   Opens the connection, answering once the port exists rather than once it is
   up. Wait for `:connected` before sending.
   """
-  @spec open(binary, binary, binary) :: {:ok, port} | {:error, term}
-  def open(base, chip, name) do
-    :websocket_client.open(opts(base, chip, name))
+  @spec open(binary, binary, binary, [{binary, binary}]) :: {:ok, port} | {:error, term}
+  def open(base, chip, name, extra \\ []) do
+    :websocket_client.open(opts(base, chip, name, extra))
   end
 
   defp verify("ws://" <> _), do: :none
