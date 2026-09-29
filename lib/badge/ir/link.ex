@@ -87,7 +87,7 @@ defmodule Badge.Ir.Link do
   end
 
   defp open do
-    :uart.open("UART1", [
+    :uart.open("UART1",
       tx: Hardware.ir_led(),
       rx: Hardware.ir_sense(),
       speed: @baud,
@@ -95,7 +95,7 @@ defmodule Badge.Ir.Link do
       stop_bits: 1,
       parity: :none,
       flow_control: :none
-    ])
+    )
   end
 
   # Badge.Ir refuses an oversized payload first; this is the second line.
