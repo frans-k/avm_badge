@@ -77,7 +77,7 @@ defmodule Badge.Page.RaycasterTest do
     @figure {900, 300, 0xE0433A}
 
     defp with_others(others),
-      do: elem(Raycaster.handle_info({:raycaster, {:players, others}}, Raycaster.init()), 1)
+      do: elem(Raycaster.handle_info({:raycaster, {:players, others, nil}}, Raycaster.init()), 1)
 
     test "offline until the relay puts the badge in a room" do
       assert Enum.any?(
@@ -106,7 +106,7 @@ defmodule Badge.Page.RaycasterTest do
       state = with_others([@figure])
 
       assert %{others: [@figure]} = state
-      assert {:ok, %{others: []}} = Raycaster.handle_info({:raycaster, {:players, []}}, state)
+      assert {:ok, %{others: []}} = Raycaster.handle_info({:raycaster, {:players, [], nil}}, state)
       assert {:ok, %{others: [], link: :off}} = Raycaster.handle_info({:raycaster, :down}, state)
     end
 
@@ -125,6 +125,50 @@ defmodule Badge.Page.RaycasterTest do
       # The status line, then a head and a body, then exactly what was there before.
       assert length(with_figure) == length(without) + 2
       assert Enum.drop(with_figure, 3) == Enum.drop(without, 1)
+    end
+
+    test "the goat is drawn when the relay says where it is, and is gone when it is not" do
+      # Four cells ahead of the spawn point, facing east along row 1.
+      state = Raycaster.init()
+      without = Raycaster.render(state)
+
+      {:ok, seen} =
+        Raycaster.handle_info({:raycaster, {:players, [], {384 + 4 * 256, 384, true}}}, state)
+
+      assert %{goat: {_x, _y, true}} = seen
+      # Five rectangles at this distance, thirteen close up.
+      assert length(Raycaster.render(seen)) >= length(without) + 5
+
+      {:ok, gone} = Raycaster.handle_info({:raycaster, {:players, [], nil}}, seen)
+      assert Raycaster.render(gone) == without
+    end
+
+    test "the line says how long this life has lasted once there is a goat" do
+      up = elem(Raycaster.handle_info({:raycaster, :up}, Raycaster.init()), 1)
+      {:ok, up} = Raycaster.handle_info({:raycaster, {:players, [], {900, 900, false}}}, up)
+
+      assert Enum.any?(
+               Raycaster.render(up),
+               &match?({:text, _, _, _, _, _, "online, 1 playing, alive 0 s"}, &1)
+             )
+    end
+
+    test "being caught shows the game over screen, inside the content area" do
+      {:ok, caught} = Raycaster.handle_info({:raycaster, :caught}, Raycaster.init())
+      items = Raycaster.render(caught)
+
+      assert Enum.any?(items, &match?({:text, _, _, _, _, _, "GAME OVER"}, &1))
+
+      for {:text, _x, y, _font, _fg, _bg, _text} <- items, do: assert(y >= Theme.content_top())
+      for {:rect, _x, y, _w, _h, _c} <- items, do: assert(y >= Theme.content_top())
+    end
+
+    test "a catch is taken once, and the game over screen outlasts a key still held" do
+      {:ok, caught} = Raycaster.handle_info({:raycaster, :caught}, Raycaster.init())
+
+      assert Raycaster.handle_info({:raycaster, :caught}, caught) == :ignore
+      # Without a key held, and within the time it stays up, ticking changes nothing.
+      assert Raycaster.tick(caught).caught == caught.caught
     end
 
     test "a message it does not know is ignored" do

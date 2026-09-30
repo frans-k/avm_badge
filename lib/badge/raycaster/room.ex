@@ -5,8 +5,9 @@ defmodule Badge.Raycaster.Room do
 
     * to join: `phx_join` on `raycaster:lobby`; the answer says which slot this badge has
     * to say where it stands: `pos`, `{"x": .., "y": ..}`; no answer
-    * once a second the server sends `snap`, `{"p": [[slot, x, y], ...]}`: everyone in
-      the room, this badge too, by slot
+    * once a second the server sends `snap`, `{"p": [[slot, x, y], ...], "g": [x, y,
+      hunting]}`: everyone in the room, this badge too, by slot, and the goat
+    * `caught` when the goat has caught this badge, and `respawn` back to come back
     * `heartbeat` on `phoenix` now and then, or Phoenix drops a quiet connection
 
   The server is open to anyone who has its address, so a snapshot with anything odd in
@@ -31,6 +32,9 @@ defmodule Badge.Raycaster.Room do
   @spec pos(binary, binary, integer, integer) :: binary
   def pos(join_ref, ref, x, y), do: Wire.encode(join_ref, ref, @topic, "pos", %{"x" => x, "y" => y})
 
+  @spec respawn(binary, binary) :: binary
+  def respawn(join_ref, ref), do: Wire.encode(join_ref, ref, @topic, "respawn", %{})
+
   @spec heartbeat() :: binary
   def heartbeat, do: Wire.encode(nil, "0", "phoenix", "heartbeat", %{})
 
@@ -40,19 +44,31 @@ defmodule Badge.Raycaster.Room do
 
   @doc """
   Reads a frame from the server, given this badge's own slot (nil before it has one):
-  `{:joined, slot}`, `{:players, [{x, y, colour}]}` without this badge in it, or `:ignore`.
+  `{:joined, slot}`, `{:players, [{x, y, colour}], goat}` without this badge in it, where the goat is
+  `{x, y, hunting}` or nil, `:caught`, or `:ignore`.
   """
   @spec interpret(binary, integer | nil) ::
-          {:joined, pos_integer} | {:players, [{integer, integer, integer}]} | :ignore
+          {:joined, pos_integer}
+          | {:players, [{integer, integer, integer}], {integer, integer, boolean} | nil}
+          | :caught
+          | :ignore
   def interpret(frame, own_slot) do
     case Wire.decode_frame(frame) do
       {:ok, %{topic: @topic, event: "phx_reply", payload: %{"status" => "ok", "response" => %{"slot" => slot, "max" => max}}}}
       when is_integer(slot) and is_integer(max) and slot > 0 and slot <= max ->
         {:joined, slot}
 
-      {:ok, %{topic: @topic, event: "snap", payload: %{"p" => players}}}
+      {:ok, %{topic: @topic, event: "snap", payload: %{"p" => players} = snap}}
       when is_list(players) and length(players) <= @room_max ->
-        players(players, own_slot, [])
+        with {:players, players} <- players(players, own_slot, []),
+             {:ok, goat} <- goat(:maps.get("g", snap, nil)) do
+          {:players, players, goat}
+        else
+          _odd -> :ignore
+        end
+
+      {:ok, %{topic: @topic, event: "caught"}} ->
+        :caught
 
       _other ->
         :ignore
@@ -70,4 +86,14 @@ defmodule Badge.Raycaster.Room do
   end
 
   defp players(_odd, _own, _acc), do: :ignore
+
+  defp goat(nil), do: {:ok, nil}
+  defp goat(:null), do: {:ok, nil}
+
+  defp goat([x, y, hunting])
+       when is_integer(x) and is_integer(y) and x >= 0 and x < @limit and y >= 0 and y < @limit and
+              hunting in [0, 1],
+       do: {:ok, {x, y, hunting == 1}}
+
+  defp goat(_odd), do: :error
 end

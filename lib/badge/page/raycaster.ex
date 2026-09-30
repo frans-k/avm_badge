@@ -7,10 +7,15 @@ defmodule Badge.Page.Raycaster do
   rather than tapped, with `Badge.Keyboard.held/0` on every tick: key events only arrive
   on press and auto-repeat, which is no way to walk.
 
-  Every badge that has this page open tells a relay server where it stands once a second,
+  Every badge that has this page open tells a relay server where it stands twice a second,
   see `Badge.Raycaster.Link`, and is told where the others are: they are drawn as coloured
-  figures. The line at the bottom says whether the link is up and how many are playing.
-  Without wifi it is a room to walk around in on your own.
+  figures. The line at the bottom says whether the link is up, how many are playing and how
+  long this life has lasted. Without wifi it is a room to walk around in on your own.
+
+  The relay also has an evil goat in every room, which hunts the players. When it catches
+  this badge the page shows `Raycaster.GameOver` until a key is pressed, tells the relay
+  the badge is back and starts again where the goat is farthest. The four LEDs are left
+  alone: the goat's warning glow needs a pattern the LED driver has no place for.
 
   The map is fetched with `Raycaster.Engine.grid/0` once per call and never kept in the
   state: AtomVM copies a module literal onto the heap each time it is looked up, so the
@@ -24,6 +29,7 @@ defmodule Badge.Page.Raycaster do
   alias Badge.Raycaster.Link
   alias Badge.Theme
   alias Raycaster.Engine
+  alias Raycaster.GameOver
 
   # The view fills what is under the title bar.
   @view_w Theme.width()
@@ -34,8 +40,13 @@ defmodule Badge.Page.Raycaster do
   @max_dt 250
 
   # How often to say where we are. The relay hands out one snapshot a second and forgets
-  # a badge that is quiet for five seconds.
-  @announce_ms 1_000
+  # a badge that is quiet for five seconds, but its goat judges a catch on the last
+  # position it heard, so twice a second keeps that fairer.
+  @announce_ms 500
+
+  # How long the game over screen stays whatever is pressed, so a key held while running
+  # from the goat does not skip it.
+  @over_ms 1_500
 
   @impl true
   def title, do: "Raycaster"
@@ -47,38 +58,71 @@ defmodule Badge.Page.Raycaster do
   def refresh(_state), do: 100
 
   # `at` is when the player last moved, or nil while standing still. `others` is what the
-  # relay last said, ready for the engine. `sent` is when we last said where we are.
+  # relay last said, ready for the engine, and `goat` is where it says the goat is, or
+  # nil. `sent` is when we last said where we are, `born` when this life began, and
+  # `caught` is nil, or `{when, seconds lasted}` while the game over screen is up.
   @impl true
-  def init, do: %{player: Engine.new(), at: nil, others: [], link: :off, sent: nil}
+  def init do
+    %{
+      player: Engine.new(),
+      at: nil,
+      others: [],
+      goat: nil,
+      link: :off,
+      sent: nil,
+      born: now(),
+      caught: nil
+    }
+  end
 
   @impl true
   def tick(state) do
     Link.open()
     now = now()
 
-    state
-    |> walk(now)
-    |> tell(now)
+    case state.caught do
+      nil -> state |> walk(now) |> tell(now)
+      caught -> revive(state, caught, now)
+    end
   end
 
   @impl true
   def handle_info({:raycaster, :up}, state), do: {:ok, %{state | link: :up, sent: nil}}
-  def handle_info({:raycaster, :down}, state), do: {:ok, %{state | link: :off, others: []}}
-  def handle_info({:raycaster, {:players, others}}, state), do: {:ok, %{state | others: others}}
+
+  def handle_info({:raycaster, :down}, state),
+    do: {:ok, %{state | link: :off, others: [], goat: nil}}
+
+  def handle_info({:raycaster, {:players, others, goat}}, state),
+    do: {:ok, %{state | others: others, goat: goat}}
+
+  def handle_info({:raycaster, :caught}, %{caught: nil, born: born} = state) do
+    now = now()
+    {:ok, %{state | caught: {now, div(now - born, 1000)}}}
+  end
+
   def handle_info(_message, _state), do: :ignore
 
   @impl true
   def leave(_state), do: Link.close()
 
   @impl true
-  def render(%{player: player, others: others, link: link}) do
+  def render(%{caught: {_when, lasted}}) do
+    scene = GameOver.items(Engine.grid(), lasted, @view_w, @view_h)
+
+    shift(scene, Theme.content_top(), [])
+  end
+
+  def render(%{player: player, others: others, goat: goat, link: link, born: born}) do
     grid = Engine.grid()
-    figures = Engine.sprites(grid, player, others, @view_w, @view_h)
+    figures = Engine.sprites(grid, player, goat(goat, others), @view_w, @view_h)
     walls = Engine.frame(grid, player, @view_w, @view_h)
     scene = shift(:lists.append(figures, walls), Theme.content_top(), [])
 
-    [status(link, length(others)) | scene]
+    [status(link, length(others), goat, born) | scene]
   end
+
+  defp goat(nil, others), do: others
+  defp goat({x, y, hunting}, others), do: [{:goat, x, y, hunting} | others]
 
   defp walk(%{player: player, at: at} = state, now) do
     case Keyboard.held() do
@@ -103,10 +147,31 @@ defmodule Badge.Page.Raycaster do
 
   defp tell(state, _now), do: state
 
-  defp status(:off, _others), do: line("offline")
+  # After the game over screen a key press brings the badge back, once the screen has
+  # been up for a while. The relay is told, and the badge starts again where the goat is
+  # not.
+  defp revive(%{goat: goat} = state, {since, _lasted}, now) do
+    if now - since >= @over_ms and Keyboard.held() != [] do
+      Link.respawn()
 
-  defp status(:up, others),
+      %{state | player: Engine.respawn(goat), at: nil, sent: nil, born: now, caught: nil}
+    else
+      state
+    end
+  end
+
+  defp status(:off, _others, _goat, _born), do: line("offline")
+
+  defp status(:up, others, nil, _born),
     do: line("online, " <> :erlang.integer_to_binary(others + 1) <> " playing")
+
+  defp status(:up, others, _goat, born) do
+    line(
+      "online, " <>
+        :erlang.integer_to_binary(others + 1) <>
+        " playing, alive " <> :erlang.integer_to_binary(div(now() - born, 1000)) <> " s"
+    )
+  end
 
   defp line(text), do: {:text, 4, Theme.height() - 18, :default16px, Theme.fg(), Theme.bg(), text}
 
@@ -115,6 +180,10 @@ defmodule Badge.Page.Raycaster do
 
   defp shift([{:rect, x, y, w, h, colour} | rest], top, acc) do
     shift(rest, top, [{:rect, x, y + top, w, h, colour} | acc])
+  end
+
+  defp shift([{:text, x, y, font, fg, bg, text} | rest], top, acc) do
+    shift(rest, top, [{:text, x, y + top, font, fg, bg, text} | acc])
   end
 
   defp now, do: :erlang.monotonic_time(:millisecond)

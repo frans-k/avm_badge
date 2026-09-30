@@ -43,15 +43,41 @@ defmodule Badge.Raycaster.RoomTest do
     end
 
     test "a snapshot is everyone else, ready for the engine, in their slot's colour" do
-      assert {:players, [{10, 20, c1}, {50, 60, c3}]} =
+      assert {:players, [{10, 20, c1}, {50, 60, c3}], nil} =
                Room.interpret(snap("[[1,10,20],[2,30,40],[3,50,60]]"), 2)
 
       assert c1 == Room.colour(1)
       assert c3 == Room.colour(3)
     end
 
+    test "the goat is where the snapshot says, and a server without one has none" do
+      with_goat = ~s([null,null,"raycaster:lobby","snap",{"p":[],"g":[900,300,1]}])
+      calm = ~s([null,null,"raycaster:lobby","snap",{"p":[],"g":[900,300,0]}])
+      none = ~s([null,null,"raycaster:lobby","snap",{"p":[],"g":null}])
+
+      assert Room.interpret(with_goat, 1) == {:players, [], {900, 300, true}}
+      assert Room.interpret(calm, 1) == {:players, [], {900, 300, false}}
+      assert Room.interpret(none, 1) == {:players, [], nil}
+    end
+
+    test "a goat outside the map, or in the wrong shape, refuses the snapshot" do
+      for goat <- ["[9999,300,1]", "[-1,300,1]", "[900,300,2]", "[900,300]", ~s("goat"), "1.5"] do
+        frame = ~s([null,null,"raycaster:lobby","snap",{"p":[],"g":#{goat}}])
+        assert Room.interpret(frame, nil) == :ignore
+      end
+    end
+
+    test "caught is told on the lobby topic only" do
+      assert Room.interpret(~s([null,null,"raycaster:lobby","caught",{}]), 1) == :caught
+      assert Room.interpret(~s([null,null,"chat:lobby","caught",{}]), 1) == :ignore
+    end
+
+    test "respawn is a Phoenix frame with the join ref" do
+      assert Room.respawn("1", "7") == ~s(["1","7","raycaster:lobby","respawn",{}])
+    end
+
     test "an empty room is an empty list, not an error" do
-      assert Room.interpret(snap("[]"), 1) == {:players, []}
+      assert Room.interpret(snap("[]"), 1) == {:players, [], nil}
     end
 
     test "a snapshot with anything odd in it is refused whole" do

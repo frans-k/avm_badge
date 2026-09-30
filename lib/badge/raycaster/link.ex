@@ -11,7 +11,10 @@ defmodule Badge.Raycaster.Link do
 
     * `{:raycaster, :up}` once the server has put this badge in a room, and
       `{:raycaster, :down}` when the connection is lost
-    * `{:raycaster, {:players, [{x, y, colour}]}}` once a second: everyone else
+    * `{:raycaster, {:players, [{x, y, colour}], goat}}` once a second: everyone else,
+      and the goat, `{x, y, hunting}` or nil
+    * `{:raycaster, :caught}` when the goat has caught this badge; `respawn/0` says it
+      is back
 
   The relay is the `raycaster_url` NVS key, or a default, and the token it asks for
   the `raycaster_token` key.
@@ -48,6 +51,10 @@ defmodule Badge.Raycaster.Link do
   @spec publish(integer, integer) :: :ok
   def publish(x, y), do: GenServer.cast(__MODULE__, {:publish, x, y})
 
+  @doc "Back in the game after being caught. Dropped while not in a room."
+  @spec respawn() :: :ok
+  def respawn, do: GenServer.cast(__MODULE__, :respawn)
+
   @impl true
   def init(:ok) do
     start_ticker()
@@ -71,6 +78,15 @@ defmodule Badge.Raycaster.Link do
   end
 
   def handle_cast({:publish, _x, _y}, state), do: {:noreply, state}
+
+  def handle_cast(:respawn, %{slot: slot, port: port} = state) when slot != nil do
+    state = %{state | ref: state.ref + 1}
+    send_frame(port, Room.respawn(join_ref(state), Integer.to_string(state.ref)))
+
+    {:noreply, state}
+  end
+
+  def handle_cast(:respawn, state), do: {:noreply, state}
 
   @impl true
   def handle_info(:tick, state), do: {:noreply, state |> connect() |> beat()}
@@ -99,8 +115,13 @@ defmodule Badge.Raycaster.Link do
     %{state | slot: slot}
   end
 
-  defp heard({:players, players}, state) do
-    send(Badge.UI, {:raycaster, {:players, players}})
+  defp heard({:players, players, goat}, state) do
+    send(Badge.UI, {:raycaster, {:players, players, goat}})
+    state
+  end
+
+  defp heard(:caught, state) do
+    send(Badge.UI, {:raycaster, :caught})
     state
   end
 
