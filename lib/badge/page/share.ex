@@ -14,6 +14,7 @@ defmodule Badge.Page.Share do
   alias Badge.Icons
   alias Badge.Identity
   alias Badge.Ir
+  alias Badge.Page.Share.Art
   alias Badge.Peers
   alias Badge.Pixels
   alias Badge.Profile
@@ -80,7 +81,6 @@ defmodule Badge.Page.Share do
   @detail_x @margin + @icon_w + 6
 
   # Two badges meeting, centred between the chip id and the badge heard.
-  @art :badge_share
   @art_y 90
 
   @dot_y 228
@@ -333,7 +333,7 @@ defmodule Badge.Page.Share do
   def render(%{mode: :detail, opened: %{profile: profile}}), do: detail_screen(profile)
 
   def render(%{screen: @share_screen} = state) do
-    [art()] ++ share_screen(state) ++ dots(@share_screen)
+    art() ++ share_screen(state) ++ dots(@share_screen)
   end
 
   def render(%{screen: @sharing_screen} = state),
@@ -512,9 +512,9 @@ defmodule Badge.Page.Share do
   defp badge_icon(icon, y), do: [Icons.item(icon, @margin, y)]
 
   defp art do
-    {width, _height} = Icons.size(@art)
+    {width, _height} = Art.size()
 
-    Icons.item(@art, div(Theme.width() - width, 2), @art_y)
+    Art.items(div(Theme.width() - width, 2), @art_y, Theme.glyph())
   end
 
   # Before anyone has been heard there is nothing to report but the count.

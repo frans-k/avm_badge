@@ -81,10 +81,14 @@ defmodule Badge.Page.ShareTest do
   describe "the share screen" do
     test "shows two badges meeting, whatever else it has to say" do
       for state <- [Page.init(), loaded(), loaded(%{})] do
-        assert Enum.any?(
-                 Page.render(state),
-                 &match?({:image, 88, 90, _bg, {:rgba8888, 144, 64, _pixels}}, &1)
-               )
+        art =
+          for {:rect, x, y, w, h, colour} <- Page.render(state),
+              x >= 88 and x + w <= 88 + 144 and y >= 90 and y + h <= 90 + 64,
+              do: colour
+
+        # Drawn in the skin's glyph colour, and nothing else is that colour in that box.
+        assert length(art) > 100
+        assert Enum.all?(art, &(&1 == Badge.Theme.glyph()))
       end
     end
 
