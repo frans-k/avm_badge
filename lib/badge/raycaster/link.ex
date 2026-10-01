@@ -30,10 +30,11 @@ defmodule Badge.Raycaster.Link do
 
   @default_url "wss://evilgoat-relay.fly.dev"
 
-  # The token the relay asks for, when there is no `raycaster_token` key: read while
-  # compiling, like the secret the update link has built in. It ends up in the image,
-  # so it keeps casual visitors out and nobody who reads the firmware.
-  @default_token System.get_env("RAYCASTER_RELAY_TOKEN")
+  # The token the relay asks for, when there is no `raycaster_token` key. It is public, in
+  # this repo and in the image, like the secret the update link has built in: it keeps
+  # casual visitors out, not anyone who reads it. If it is abused the relay's token is
+  # changed and a new firmware carries the new one.
+  @default_token "7411d88d1c0034a4"
 
   @tick 2_000
   # A heartbeat about every 24 seconds; Phoenix drops a connection that goes quiet.
