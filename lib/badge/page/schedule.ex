@@ -11,9 +11,13 @@ defmodule Badge.Page.Schedule do
   nothing is on, and follows the clock. Once the arrows have moved it, Esc
   brings it back to now; on now, Esc is left for the router and goes Home.
 
-  The programme itself lives in `Badge.Schedule.Link`, which fetches it by
+  The programme comes from a source module answering `status/0`,
+  `entries/0` and `retry/0`: `Badge.Schedule.Link` here, which fetches it by
   itself and answers from what it holds; every line here is drawn as held.
-  The link and the clock are read once a minute, not on every tick: a call
+  `init/1` takes another source, which is how `Badge.Page.AshConf` reuses
+  this page. The time is `Badge.Clock.Keeper`'s, so a badge without wifi
+  carries on from its last known time. The source and the clock are read
+  once a minute, not on every tick: a call
   from the render loop costs a round of every other process, nothing here
   changes faster than the countdowns, and where now falls is worked out then
   rather than on each frame. The state holds the
@@ -24,6 +28,7 @@ defmodule Badge.Page.Schedule do
 
   use Badge.Page
 
+  alias Badge.Clock.Keeper
   alias Badge.Schedule
   alias Badge.Schedule.Link
   alias Badge.Theme
@@ -61,8 +66,13 @@ defmodule Badge.Page.Schedule do
   def columns, do: @columns
 
   @impl true
-  def init do
+  def init, do: init(Link)
+
+  @doc "Fresh state reading its programme from `source`."
+  @spec init(module) :: map
+  def init(source) do
     %{
+      source: source,
       entries: {},
       status: :idle,
       reason: nil,
@@ -83,22 +93,22 @@ defmodule Badge.Page.Schedule do
 
     case minute == state.minute do
       true -> state
-      false -> poll(%{state | minute: minute}, seconds)
+      false -> poll(%{state | minute: minute})
     end
   end
 
-  defp poll(state, seconds) do
-    status = Link.status()
+  defp poll(state) do
+    status = state.source.status()
 
     state
     |> refresh_entries(status)
-    |> apply_status(status, Schedule.now(seconds))
+    |> apply_status(status, Schedule.now(Keeper.now()))
   end
 
   defp refresh_entries(%{version: version} = state, %{version: version}), do: state
 
   defp refresh_entries(state, status),
-    do: apply_entries(Link.entries(), status.version, state)
+    do: apply_entries(state.source.entries(), status.version, state)
 
   @doc "Takes a fresh programme from the link, tagged with its version."
   @spec apply_entries(Schedule.entries(), integer, map) :: map
@@ -143,7 +153,7 @@ defmodule Badge.Page.Schedule do
   end
 
   def handle_key({:edit, :newline}, %{status: :failed} = state) do
-    Link.retry()
+    state.source.retry()
 
     {:ok, state}
   end

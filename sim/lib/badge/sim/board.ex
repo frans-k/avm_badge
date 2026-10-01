@@ -23,6 +23,7 @@ defmodule Badge.Sim.Board do
       {Badge.Pixels, :sim_spi},
       {Badge.Sensors, :ok},
       {Badge.Power, :ok},
+      {Badge.Clock.Keeper, :ok},
       {Badge.Schedule.Link, :ok}
     ]
 

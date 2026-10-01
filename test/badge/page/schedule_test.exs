@@ -274,6 +274,10 @@ defmodule Badge.Page.ScheduleTest do
         {:ok, _pid} -> :ok
         {:error, {:already_started, _pid}} -> :ok
       end
+
+      start_supervised!(Badge.Sim.Nvs)
+      start_supervised!({Badge.Clock.Keeper, :ok})
+      :ok
     end
 
     test "reads the link and the clock once a minute, then leaves the state alone" do

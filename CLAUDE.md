@@ -230,6 +230,13 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
   `mix badge.schedule` refreshes the file; commit it and flash
 - Times are Swedish local, converted through `Badge.Zone` for
   `Europe/Stockholm`, not the badge's own zone. A clock before 2024 is unset
+- `Badge.Clock.Keeper` saves the wall time to NVS key `clock` once a minute.
+  Without SNTP the schedule runs from the saved time plus uptime, behind by
+  however long the badge was off. AtomVM cannot set the system clock, so the
+  title bar still shows uptime
+- `Badge.Page.AshConf` (second home screen) is `Badge.Page.Schedule` over
+  `Badge.Schedule.AshConf`, compiled from `assets/ashconf-2026-schedule.json`.
+  A source answers `status/0`, `entries/0` and `retry/0`
 - **The over-the-air refresh is off (`@fetch false`)**: this VM's `:ssl` does
   not survive a handshake to goatmire.com — `verify_peer` corrupts the heap
   right after certificate validation, `verify_none` spins the task watchdog.
