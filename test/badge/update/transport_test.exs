@@ -15,6 +15,8 @@ defmodule Badge.Update.TransportTest do
 
     def open(%{refuse: reason}), do: {:error, reason}
 
+    def send_text(_port, "refuse"), do: :send_failed
+
     def send_text(port, data) do
       send(port, {:sent, data})
       :ok
@@ -57,6 +59,13 @@ defmodule Badge.Update.TransportTest do
     assert Transport.close(relay) == :ok
     assert_receive {:closed, ^port}
     assert_receive {:DOWN, ^ref, :process, ^relay, _reason}
+  end
+
+  test "a send the driver refuses with a bare atom is an error tuple" do
+    {:ok, relay} = open()
+
+    assert Transport.send_text(relay, "refuse") == {:error, :send_failed}
+    assert Transport.send_text(relay, "after") == :ok
   end
 
   test "a closed relay refuses sends and closes quietly" do

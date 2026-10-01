@@ -9,7 +9,8 @@ defmodule Badge.Update.Transport do
   pid is the handle the agent holds.
 
   The relay closes the socket and exits when the agent closes it or exits.
-  Pass it to the agent as `transport: Badge.Update.Transport`.
+  Pass it to the agent as `transport: Badge.Update.Transport`. Every step but
+  a text frame is logged as `Socket:` with the internal RAM left.
   """
 
   @compile {:no_warn_undefined, :websocket_client}
@@ -50,6 +51,8 @@ defmodule Badge.Update.Transport do
   end
 
   defp start(caller, owner, config, client) do
+    log(~c"opening ~s", [Map.get(config, :url, "")])
+
     case client.open(%{config | owner: self()}) do
       {:ok, port} ->
         send(caller, {self(), {:ok, self()}})
@@ -57,6 +60,7 @@ defmodule Badge.Update.Transport do
         relay(port, owner, client)
 
       error ->
+        log(~c"open failed ~p", [error])
         send(caller, {self(), error})
     end
   end
@@ -64,20 +68,49 @@ defmodule Badge.Update.Transport do
   defp relay(port, owner, client) do
     receive do
       {:websocket, _driver, event} ->
+        trace(event)
         send(owner, {:websocket, self(), event})
         relay(port, owner, client)
 
       {{:send_text, data}, from, ref} ->
-        send(from, {ref, client.send_text(port, data)})
+        send(from, {ref, sent(client.send_text(port, data))})
         relay(port, owner, client)
 
       {:close, from, ref} ->
+        log(~c"closing", [])
         client.close(port)
         send(from, {ref, :ok})
 
-      {:DOWN, _ref, :process, ^owner, _reason} ->
+      {:DOWN, _ref, :process, ^owner, reason} ->
+        log(~c"agent gone ~p, closing", [reason])
         client.close(port)
     end
+  end
+
+  # The driver answers a failed send with a bare atom, which the agent cannot match.
+  defp sent(:ok), do: :ok
+  defp sent({:error, _reason} = error), do: error
+
+  defp sent(reason) do
+    log(~c"send failed ~p", [reason])
+    {:error, reason}
+  end
+
+  defp trace({:text, _frame}), do: :ok
+  defp trace({:binary, _frame}), do: :ok
+  defp trace(event), do: log(~c"~p", [event])
+
+  defp log(format, args) do
+    :io.format(~c"Socket: internal=~p/~p " ++ format ++ ~c"~n", internal() ++ args)
+  end
+
+  defp internal do
+    [
+      :erlang.system_info(:esp32_internal_free_size),
+      :erlang.system_info(:esp32_internal_largest_free_block)
+    ]
+  catch
+    _kind, _error -> [:unknown, :unknown]
   end
 
   defp call(relay, request) do

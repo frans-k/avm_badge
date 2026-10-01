@@ -210,6 +210,8 @@ defmodule Badge.Update.Link do
   end
 
   def handle_info({:agent, {:ok, agent}}, state) do
+    Process.monitor(agent)
+
     {:noreply, %{state | agent: agent, starting: false}}
   end
 
@@ -275,6 +277,14 @@ defmodule Badge.Update.Link do
     report_failure(state, reason)
 
     {:noreply, failed(state, reason)}
+  end
+
+  # Cleared so the ticker starts a fresh agent while the tab still wants one.
+  def handle_info({:DOWN, _ref, :process, agent, reason}, %{agent: agent} = state) do
+    :io.format(~c"Update: agent died ~p~n", [reason])
+    Log.forward(nil)
+
+    {:noreply, %{failed(state, reason) | agent: nil}}
   end
 
   def handle_info({:DOWN, _ref, :process, _pid, _reason}, state), do: {:noreply, state}
@@ -528,7 +538,8 @@ defmodule Badge.Update.Link do
       firmware_trial: :off,
       firmware: {:metadata, state.metadata},
       console: true,
-      extensions: :all,
+      # No geo: its lookup opens a second TLS session beside this socket.
+      extensions: [:health, :logging],
       transport: Badge.Update.Transport
     ]
 

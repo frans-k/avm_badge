@@ -187,7 +187,20 @@ defmodule Badge.Pixels do
       |> Enum.map(&encode_pixel/1)
       |> Enum.reduce(<<>>, fn bytes, acc -> acc <> bytes end)
 
-    :ok = :spi.write(spi, @device, %{write_data: frame <> @latch})
+    wrote(:spi.write(spi, @device, %{write_data: frame <> @latch}))
+  end
+
+  # A write fails when internal DMA RAM runs short; the frame is dropped, not the process.
+  defp wrote(:ok) do
+    if :erlang.erase(:spi_failing) == true, do: :io.format(~c"Pixels: writes recovered~n")
+    :ok
+  end
+
+  defp wrote(error) do
+    if :erlang.put(:spi_failing, true) != true,
+      do: :io.format(~c"Pixels: write failed ~p, dropping frames~n", [error])
+
+    :ok
   end
 
   defp fill(spi, colour) do
