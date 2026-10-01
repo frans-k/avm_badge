@@ -106,7 +106,10 @@ defmodule Badge.Page.RaycasterTest do
       state = with_others([@figure])
 
       assert %{others: [@figure]} = state
-      assert {:ok, %{others: []}} = Raycaster.handle_info({:raycaster, {:players, [], nil}}, state)
+
+      assert {:ok, %{others: []}} =
+               Raycaster.handle_info({:raycaster, {:players, [], nil}}, state)
+
       assert {:ok, %{others: [], link: :off}} = Raycaster.handle_info({:raycaster, :down}, state)
     end
 
@@ -169,6 +172,16 @@ defmodule Badge.Page.RaycasterTest do
       assert Raycaster.handle_info({:raycaster, :caught}, caught) == :ignore
       # Without a key held, and within the time it stays up, ticking changes nothing.
       assert Raycaster.tick(caught).caught == caught.caught
+    end
+
+    test "being caught turns the LEDs steady red, once" do
+      {:ok, caught} = Raycaster.handle_info({:raycaster, :caught}, Raycaster.init())
+      assert %{dread: 0} = caught
+
+      lit = Raycaster.tick(caught)
+      assert %{dread: :caught} = lit
+      # The level did not change, so the LEDs are not told again.
+      assert Raycaster.tick(lit) == lit
     end
 
     test "a message it does not know is ignored" do

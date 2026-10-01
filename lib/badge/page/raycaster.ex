@@ -14,8 +14,9 @@ defmodule Badge.Page.Raycaster do
 
   The relay also has an evil goat in every room, which hunts the players. When it catches
   this badge the page shows `Raycaster.GameOver` until a key is pressed, tells the relay
-  the badge is back and starts again where the goat is farthest. The four LEDs are left
-  alone: the goat's warning glow needs a pattern the LED driver has no place for.
+  the badge is back and starts again where the goat is farthest. The four LEDs warn
+  of the goat before it is seen, see `Raycaster.Omen`, and are the badge's own LED mode again
+  when it is far off and on leaving.
 
   The map is fetched with `Raycaster.Engine.grid/0` once per call and never kept in the
   state: AtomVM copies a module literal onto the heap each time it is looked up, so the
@@ -26,10 +27,12 @@ defmodule Badge.Page.Raycaster do
   use Badge.Page
 
   alias Badge.Keyboard
+  alias Badge.Pixels
   alias Badge.Raycaster.Link
   alias Badge.Theme
   alias Raycaster.Engine
   alias Raycaster.GameOver
+  alias Raycaster.Omen
 
   # The view fills what is under the title bar.
   @view_w Theme.width()
@@ -71,7 +74,8 @@ defmodule Badge.Page.Raycaster do
       link: :off,
       sent: nil,
       born: now(),
-      caught: nil
+      caught: nil,
+      dread: 0
     }
   end
 
@@ -81,8 +85,8 @@ defmodule Badge.Page.Raycaster do
     now = now()
 
     case state.caught do
-      nil -> state |> walk(now) |> tell(now)
-      caught -> revive(state, caught, now)
+      nil -> state |> walk(now) |> tell(now) |> feel()
+      caught -> state |> revive(caught, now) |> feel()
     end
   end
 
@@ -103,7 +107,10 @@ defmodule Badge.Page.Raycaster do
   def handle_info(_message, _state), do: :ignore
 
   @impl true
-  def leave(_state), do: Link.close()
+  def leave(_state) do
+    Pixels.pattern_off()
+    Link.close()
+  end
 
   @impl true
   def render(%{caught: {_when, lasted}}) do
@@ -158,6 +165,26 @@ defmodule Badge.Page.Raycaster do
     else
       state
     end
+  end
+
+  # The LEDs say how near the goat is, and are told only when that changes. Level 0 gives them
+  # back to the LED mode the badge is set to.
+  defp feel(%{dread: level} = state) do
+    new = if state.caught == nil, do: Omen.level(state.player, state.goat), else: :caught
+
+    if new == level do
+      state
+    else
+      light(new)
+      %{state | dread: new}
+    end
+  end
+
+  defp light(0), do: Pixels.pattern_off()
+
+  defp light(level) do
+    {ms, frames} = Omen.pattern(level)
+    Pixels.pattern(ms, frames)
   end
 
   defp status(:off, _others, _goat, _born), do: line("offline")
