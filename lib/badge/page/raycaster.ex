@@ -52,7 +52,7 @@ defmodule Badge.Page.Raycaster do
   @over_ms 1_500
 
   @impl true
-  def title, do: "Raycaster"
+  def title, do: "Goat game"
 
   @impl true
   def icon, do: :clover

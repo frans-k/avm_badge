@@ -111,7 +111,7 @@ defmodule Badge.Raycaster.Link do
   def handle_info(_message, state), do: {:noreply, state}
 
   defp heard({:joined, slot}, state) do
-    :io.format(~c"Raycaster: joined the relay, slot ~p~n", [slot])
+    :io.format(~c"Goat game: joined the relay, slot ~p~n", [slot])
     send(Badge.UI, {:raycaster, :up})
     %{state | slot: slot}
   end
@@ -176,7 +176,7 @@ defmodule Badge.Raycaster.Link do
   defp send_frame(port, frame) do
     case Socket.send_frame(port, frame) do
       :ok -> :ok
-      {:error, reason} -> :io.format(~c"Raycaster: refused ~p~n", [reason])
+      {:error, reason} -> :io.format(~c"Goat game: refused ~p~n", [reason])
     end
   end
 

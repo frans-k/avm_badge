@@ -6,7 +6,7 @@ defmodule Badge.Page.RaycasterTest do
 
   describe "identity" do
     test "names itself for the home grid" do
-      assert Raycaster.title() == "Raycaster"
+      assert Raycaster.title() == "Goat game"
       assert Raycaster.icon() in Badge.Icons.names()
     end
 
