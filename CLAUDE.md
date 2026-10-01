@@ -258,6 +258,10 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
   is what takes new firmware off trial
 - `Badge.Update.Link` reads flash and opens its socket in spawned processes,
   never its own: `status/0` is called from the render loop
+- The agent (hex 0.2.0) drops socket messages whose handle is not the one
+  `open` returned, and the driver's never is, so it times out with
+  `connect_timeout` after the TLS handshake. `Badge.Update.Transport` relays
+  the socket under its own pid; never drop the `transport:` option
 
 ## Provisioning
 
