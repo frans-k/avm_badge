@@ -23,11 +23,12 @@ defmodule Badge.Pages do
     Badge.Page.Settings,
     Badge.Page.Led,
     Badge.Page.Sensors,
-    Badge.Page.Agent,
     Badge.Page.Cluster,
     Badge.Page.ConnectFour,
     Badge.Page.Raycaster,
-    Badge.Page.Console
+    Badge.Page.Vote,
+    Badge.Page.Console,
+    Badge.Page.Agent
   ]
 
   @per_screen length(@keys)
