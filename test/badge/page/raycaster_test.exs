@@ -25,7 +25,7 @@ defmodule Badge.Page.RaycasterTest do
   defp now, do: :erlang.monotonic_time(:millisecond)
 
   # The goat put where we want it, wandering, and the player standing still at the start.
-  defp with_goat(state, {x, y}), do: %{state | goat: %{state.goat | x: x * 1.0, y: y * 1.0}}
+  defp with_goat(state, {x, y}), do: %{state | goat: %{state.goat | x: x, y: y}}
 
   describe "identity" do
     test "names itself for the home grid" do

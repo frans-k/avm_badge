@@ -186,4 +186,28 @@ defmodule Raycaster.GoatTest do
       refute Goat.in_sight?(%{goat | mode: :search})
     end
   end
+
+  describe "integer positions" do
+    test "the goat stays on whole numbers however it moves" do
+      goat = %{
+        Goat.new({1, 1}, 1)
+        | mode: :search,
+          goal: {14 * 256 + 128, 14 * 256 + 128},
+          lost_at: 0
+      }
+
+      {goat, _caught, _trail} = run(goat, nil, 3_000, :faster, 0)
+
+      assert is_integer(goat.x) and is_integer(goat.y)
+    end
+
+    test "it covers about the distance its pace says" do
+      goat = Goat.new({1, 1}, 1)
+      goat = %{goat | goal: {14 * 256 + 128, 1 * 256 + 128}}
+      {moved, _caught} = Goat.step(goat, @grid, nil, 100, 100, :calm)
+
+      # 250 a second for 100 ms is 25, and only the part of a unit is lost.
+      assert (moved.x - goat.x) in 24..25
+    end
+  end
 end
