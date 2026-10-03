@@ -43,6 +43,10 @@ defmodule Badge.Page.Raycaster do
   # in a single go. The engine's own clamp is per axis.
   @max_dt 250
 
+  # Farther than this (squared, in the engine's fixed point: ten cells) the goat is not drawn
+  # in any way that is worth a repaint.
+  @near 10 * 256 * (10 * 256)
+
   # The goat starts in the cell farthest from where the player does, by walking.
   @goat_start {14, 14}
 
@@ -82,8 +86,26 @@ defmodule Badge.Page.Raycaster do
       born: now,
       safe_until: now + @grace_ms,
       caught: nil,
-      dread: 0
+      dread: 0,
+      secs: 0
     }
+  end
+
+  # The goat moves every tick, but it only changes the picture when it is near enough to be
+  # in it. Without this a standing player would be repainted ten times a second for a goat
+  # on the other side of the map.
+  @impl true
+  def changed?(old, new) do
+    old.caught != new.caught or old.player != new.player or old.secs != new.secs or
+      goat_shows?(old, new)
+  end
+
+  defp goat_shows?(%{goat: old}, %{goat: new, player: %{x: px, y: py}}) do
+    {gx, gy, hunting} = Goat.where(new)
+    dx = gx - px
+    dy = gy - py
+
+    dx * dx + dy * dy <= @near and Goat.where(old) != {gx, gy, hunting}
   end
 
   @impl true
@@ -91,7 +113,7 @@ defmodule Badge.Page.Raycaster do
     now = now()
 
     case state.caught do
-      nil -> state |> walk(now) |> chase(now) |> feel()
+      nil -> state |> walk(now) |> chase(now) |> count(now) |> feel()
       caught -> state |> revive(caught, now) |> feel()
     end
   end
@@ -106,18 +128,18 @@ defmodule Badge.Page.Raycaster do
     shift(scene, Theme.content_top(), [])
   end
 
-  def render(%{player: player, goat: goat, born: born}) do
+  def render(%{player: player, goat: goat, secs: secs}) do
     grid = Engine.grid()
     figures = Engine.sprites(grid, player, [goat_figure(goat)], @view_w, @view_h)
     walls = Engine.frame(grid, player, @view_w, @view_h)
     scene = shift(:lists.append(figures, walls), Theme.content_top(), [])
 
-    [alive(born) | scene]
+    [alive(secs) | scene]
   end
 
   defp goat_figure(goat) do
     {x, y, hunting} = Goat.where(goat)
-    {:goat, x, y, hunting}
+    {:goat, x, y, hunting, Goat.in_sight?(goat)}
   end
 
   defp walk(%{player: player, at: at} = state, now) do
@@ -142,6 +164,11 @@ defmodule Badge.Page.Raycaster do
 
     if caught, do: %{state | caught: {now, div(now - born, 1000)}}, else: state
   end
+
+  # The whole seconds this life has lasted, kept in the state so that the picture only changes
+  # when the number does.
+  defp count(%{born: born, caught: nil} = state, now), do: %{state | secs: div(now - born, 1000)}
+  defp count(state, _now), do: state
 
   defp pace(lasted) when lasted >= @faster_after_ms, do: :faster
   defp pace(lasted) when lasted >= @fast_after_ms, do: :fast
@@ -169,7 +196,9 @@ defmodule Badge.Page.Raycaster do
   # back to the LED mode the badge is set to.
   defp feel(%{dread: level} = state) do
     new =
-      if state.caught == nil, do: Omen.level(state.player, Goat.where(state.goat)), else: :caught
+      if state.caught == nil,
+        do: Omen.level(state.player, Goat.where(state.goat), level),
+        else: :caught
 
     if new == level do
       state
@@ -186,9 +215,7 @@ defmodule Badge.Page.Raycaster do
     Pixels.pattern(ms, frames)
   end
 
-  defp alive(born) do
-    line("alive " <> :erlang.integer_to_binary(div(now() - born, 1000)) <> " s")
-  end
+  defp alive(secs), do: line("alive " <> :erlang.integer_to_binary(secs) <> " s")
 
   defp line(text), do: {:text, 4, Theme.height() - 18, :default16px, Theme.fg(), Theme.bg(), text}
 

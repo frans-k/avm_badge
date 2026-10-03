@@ -48,4 +48,33 @@ defmodule Raycaster.OmenTest do
       assert {:infinity, [_one]} = Omen.pattern(:caught)
     end
   end
+
+  describe "level/3" do
+    @cell 256
+    defp goat_at(cells, hunting), do: {round(cells * @cell), 0, hunting}
+    @player %{x: 0, y: 0}
+
+    test "is level/2 while the level goes up or stays" do
+      assert Omen.level(@player, goat_at(6, false), 0) == Omen.level(@player, goat_at(6, false))
+      assert Omen.level(@player, goat_at(1, true), 1) == 3
+    end
+
+    test "holds a level a cell past its edge, and lets go beyond that" do
+      assert Omen.level(@player, goat_at(7.5, false), 1) == 1
+      assert Omen.level(@player, goat_at(8.5, false), 1) == 0
+      assert Omen.level(@player, goat_at(4.5, false), 2) == 2
+      assert Omen.level(@player, goat_at(5.5, false), 2) == 1
+      assert Omen.level(@player, goat_at(2.5, true), 3) == 3
+      assert Omen.level(@player, goat_at(3.5, true), 3) == 2
+    end
+
+    test "a goat that has stopped hunting drops from 3 at once" do
+      assert Omen.level(@player, goat_at(1, false), 3) == 2
+    end
+
+    test "no goat is 0, and the caught level is not held" do
+      assert Omen.level(@player, nil, 2) == 0
+      assert Omen.level(@player, goat_at(1, true), :caught) == 3
+    end
+  end
 end

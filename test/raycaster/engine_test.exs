@@ -180,4 +180,19 @@ defmodule Raycaster.EngineTest do
       end
     end
   end
+
+  describe "a goat known to be in sight" do
+    test "is drawn without the walk, and the walk hides one that is not" do
+      player = %{Engine.new() | a: 0}
+      # Two cells ahead of the player, in the open.
+      at = {Engine.new().x + 2 * @cell, Engine.new().y}
+      {gx, gy} = at
+
+      assert [_ | _] =
+               Engine.sprites(Engine.grid(), player, [{:goat, gx, gy, true}], @width, @height)
+
+      assert Engine.sprites(Engine.grid(), player, [{:goat, gx, gy, true, true}], @width, @height) ==
+               Engine.sprites(Engine.grid(), player, [{:goat, gx, gy, true}], @width, @height)
+    end
+  end
 end

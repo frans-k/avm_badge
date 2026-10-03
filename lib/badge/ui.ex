@@ -260,9 +260,18 @@ defmodule Badge.UI do
     end
   end
 
+  @doc false
+  # Whether a tick leaves the screen needing a repaint: it did already, the status line
+  # changed, or the page says the new state looks different from the old.
+  @spec dirty_after_tick?(map, term, term) :: boolean
+  def dirty_after_tick?(state, page_state, status) do
+    state.dirty or status != state.status or state.page.changed?(state.page_state, page_state)
+  end
+
   defp ticked(state, page_state) do
     {status, status_countdown} = refresh_status(state)
-    dirty = state.dirty or page_state != state.page_state or status != state.status
+
+    dirty = dirty_after_tick?(state, page_state, status)
 
     next = %{
       state
