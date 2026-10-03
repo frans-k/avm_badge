@@ -211,4 +211,28 @@ defmodule Badge.Page.RaycasterTest do
       assert Page.handle_key(event, Page.init()) == :ignore
     end
   end
+
+  describe "changed?/2" do
+    test "a goat that moves far from the player does not repaint the picture" do
+      old = Page.init() |> with_goat({14 * 256, 14 * 256})
+      new = with_goat(old, {14 * 256 - 20, 14 * 256})
+
+      refute Page.changed?(old, new)
+    end
+
+    test "a goat that moves near the player does" do
+      old = Page.init() |> with_goat({3 * 256, 3 * 256})
+      new = with_goat(old, {3 * 256 + 20, 3 * 256})
+
+      assert Page.changed?(old, new)
+    end
+
+    test "the player moving, the seconds counting and a catch do" do
+      old = Page.init() |> with_goat({14 * 256, 14 * 256})
+
+      assert Page.changed?(old, %{old | player: %{old.player | a: 100}})
+      assert Page.changed?(old, %{old | secs: 1})
+      assert Page.changed?(old, %{old | caught: {0, 3}})
+    end
+  end
 end

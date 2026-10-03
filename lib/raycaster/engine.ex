@@ -197,7 +197,9 @@ defmodule Raycaster.Engine do
   Other players as small figures, to go in front of what `frame/4` returns.
 
   `others` is a list of `{x, y, colour}`, positions in the same Q8 as the
-  player's, and may hold `{:goat, x, y, hunting}` for the evil goat. A player is
+  player's, and may hold `{:goat, x, y, hunting}` for the evil goat, or
+  `{:goat, x, y, hunting, true}` when it is known to be in plain sight and the
+  walk to check it can be skipped. A player is
   a head and a body, the goat a front view of one charging at you, whose eyes go
   red while `hunting` is true. Both are sized by how far away they are, and left
   out when behind the player, off to the side of the view, or hidden by a wall.
@@ -229,13 +231,17 @@ defmodule Raycaster.Engine do
   defp figures(_view, [], acc), do: acc
 
   defp figures(view, [{ox, oy, colour} | rest], acc),
-    do: figures(view, rest, place(acc, view, ox, oy, colour))
+    do: figures(view, rest, place(acc, view, ox, oy, colour, false))
 
   defp figures(view, [{:goat, ox, oy, hunting} | rest], acc),
-    do: figures(view, rest, place(acc, view, ox, oy, {:goat, hunting}))
+    do: figures(view, rest, place(acc, view, ox, oy, {:goat, hunting}, false))
 
-  # `what` is a player's colour, or `{:goat, hunting}`.
-  defp place(acc, view, ox, oy, what) do
+  defp figures(view, [{:goat, ox, oy, hunting, sure} | rest], acc),
+    do: figures(view, rest, place(acc, view, ox, oy, {:goat, hunting}, sure))
+
+  # `what` is a player's colour, or `{:goat, hunting}`. `sure` says it is already known to be
+  # in line of sight.
+  defp place(acc, view, ox, oy, what, sure) do
     {_grid, x, y, dir_x, dir_y, plane_x, plane_y, det, _width, _height} = view
 
     rel_x = ox - x
@@ -243,18 +249,18 @@ defmodule Raycaster.Engine do
     depth = div(plane_x * rel_y - plane_y * rel_x, det)
     across = div(dir_y * rel_x - dir_x * rel_y, det)
 
-    if depth >= @nearest, do: seen(acc, view, ox, oy, depth, across, what), else: acc
+    if depth >= @nearest, do: seen(acc, view, ox, oy, depth, across, what, sure), else: acc
   end
 
   # Off to the side of the view costs nothing: the walk along the line to a figure
   # is only made for one that could be seen, which is a fraction of them.
-  defp seen(acc, view, ox, oy, depth, across, what) do
+  defp seen(acc, view, ox, oy, depth, across, what, sure) do
     {grid, x, y, _dir_x, _dir_y, _plane_x, _plane_y, _det, width, height} = view
 
     centre = div(width * (depth + across), 2 * depth)
     line = div(height * 256, depth)
 
-    if centre + line > 0 and centre - line < width and visible?(grid, x, y, ox, oy) do
+    if centre + line > 0 and centre - line < width and (sure or visible?(grid, x, y, ox, oy)) do
       add_figure(acc, depth, centre, line, what, width, height)
     else
       acc

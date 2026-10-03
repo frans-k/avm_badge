@@ -140,9 +140,21 @@ defmodule Raycaster.GoatTest do
       goat = Goat.new({1, 1}, 1)
       {kept, _next} = Goat.next_cell(goat, @grid, {1, 1}, {14, 14})
       assert %{route: {{14, 14}, steps}} = kept
-      assert steps[{14, 14}] == 0
+      assert steps[14 * 16 + 14] == 0
 
       assert {^kept, _next} = Goat.next_cell(kept, @grid, {2, 1}, {14, 14})
+    end
+
+    test "the search stops at the goat, and is made again for a goat it did not reach" do
+      goat = Goat.new({1, 1}, 1)
+      {near, _next} = Goat.next_cell(goat, @grid, {3, 1}, {1, 1})
+      assert %{route: {{1, 1}, steps}} = near
+      refute Map.has_key?(steps, 14 * 16 + 14)
+
+      {far, next} = Goat.next_cell(near, @grid, {14, 14}, {1, 1})
+      assert %{route: {{1, 1}, steps}} = far
+      assert Map.has_key?(steps, 14 * 16 + 14)
+      assert next in [{13, 14}, {14, 13}]
     end
 
     test "a way that is walked from cell to cell reaches the goal and is shortest" do
@@ -163,6 +175,15 @@ defmodule Raycaster.GoatTest do
       # Corner to corner of a 14 by 14 room takes at least 26 steps.
       assert length(path) >= 26
       assert length(path) == length(Enum.uniq(path))
+    end
+  end
+
+  describe "in_sight?/1" do
+    test "is true while hunting and false while wandering" do
+      goat = Goat.new({1, 1}, 1)
+      refute Goat.in_sight?(goat)
+      assert Goat.in_sight?(%{goat | mode: :hunt})
+      refute Goat.in_sight?(%{goat | mode: :search})
     end
   end
 end

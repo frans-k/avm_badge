@@ -262,7 +262,10 @@ defmodule Badge.UI do
 
   defp ticked(state, page_state) do
     {status, status_countdown} = refresh_status(state)
-    dirty = state.dirty or page_state != state.page_state or status != state.status
+
+    dirty =
+      state.dirty or status != state.status or
+        state.page.changed?(state.page_state, page_state)
 
     next = %{
       state
