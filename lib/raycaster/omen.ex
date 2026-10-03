@@ -21,6 +21,12 @@ defmodule Raycaster.Omen do
   @near 4 * 256 * (4 * 256)
   @close 2 * 256 * (2 * 256)
 
+  # A level already reached is kept until the goat is this much farther than its edge: one
+  # cell, squared, so a goat circling at an edge does not flip the LEDs on and off.
+  @far_out 8 * 256 * (8 * 256)
+  @near_out 5 * 256 * (5 * 256)
+  @close_out 3 * 256 * (3 * 256)
+
   @doc "How much to dread a goat, `{x, y, hunting}` or nil, from where the player stands."
   def level(_player, nil), do: 0
 
@@ -36,6 +42,34 @@ defmodule Raycaster.Omen do
       true -> 0
     end
   end
+
+  @doc """
+  The same, given the `current` level: it only comes down once the goat is a cell past the
+  edge it crossed on the way up.
+  """
+  def level(_player, nil, _current), do: 0
+
+  def level(%{x: x, y: y} = player, {gx, gy, hunting} = goat, current) when is_integer(current) do
+    dx = gx - x
+    dy = gy - y
+    far = dx * dx + dy * dy
+
+    case level(player, goat) do
+      level when level < current -> max(level, held(far, hunting, current))
+      level -> level
+    end
+  end
+
+  def level(player, goat, _current), do: level(player, goat)
+
+  # The highest level up to `current` whose edge, with the cell of slack, still holds.
+  defp held(far, hunting, 3) do
+    if far <= @close_out and hunting, do: 3, else: held(far, hunting, 2)
+  end
+
+  defp held(far, hunting, 2), do: if(far <= @near_out, do: 2, else: held(far, hunting, 1))
+  defp held(far, _hunting, 1), do: if(far <= @far_out, do: 1, else: 0)
+  defp held(_far, _hunting, _none), do: 0
 
   @doc "The pattern for a level above 0: `{ms a frame, [four {r, g, b}, ...]}`."
   def pattern(1) do

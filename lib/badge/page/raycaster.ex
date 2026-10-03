@@ -196,7 +196,9 @@ defmodule Badge.Page.Raycaster do
   # back to the LED mode the badge is set to.
   defp feel(%{dread: level} = state) do
     new =
-      if state.caught == nil, do: Omen.level(state.player, Goat.where(state.goat)), else: :caught
+      if state.caught == nil,
+        do: Omen.level(state.player, Goat.where(state.goat), level),
+        else: :caught
 
     if new == level do
       state
