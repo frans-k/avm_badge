@@ -24,7 +24,9 @@ defmodule Raycaster.Engine do
   @far 1 <<< 26
 
   # 16 x 16. Digits are wall types, `.` is floor. The outer ring must be wall:
-  # rays are not bounds checked and stop only when they enter a wall cell.
+  # rays are not bounds checked and stop only when they enter a wall cell. The
+  # relay's goat walks the same map, so it is read from the relay's copy while
+  # compiling on the laptop, and the badge only ever sees the tuple below.
   @rows [
     "3333333333333333",
     "3..............3",
@@ -75,6 +77,18 @@ defmodule Raycaster.Engine do
   @turn_right 16
   @turn_left 32
 
+  # Nearer than this a figure is inside the player, and its size would run away.
+  @nearest 64
+  @skin 0xF0D0A8
+  @goat_fur 0xE6E0D2
+  @goat_face 0xD2CABA
+  @goat_beard 0xB4AC9C
+  @goat_dark 0x3C3228
+  @goat_calm 0xE8B820
+  @goat_angry 0xFF2010
+  # Pixels tall below which the goat is drawn in five rectangles.
+  @goat_detail 64
+
   # How close to a wall the player may get, in Q8.
   @radius 60
 
@@ -82,6 +96,21 @@ defmodule Raycaster.Engine do
   @compile {:inline, colour: 3, rgb: 1}
 
   def new, do: %{x: 384, y: 384, a: 0}
+
+  # Where a badge comes back after being caught: the start, or the far corner
+  # facing north, up the long open corridor of column 13, whichever is farther from
+  # the goat (as the crow flies). Without a goat, the start. West, which the corner
+  # once faced, is a pillar half a cell away that fills the screen with one wall.
+  @start %{x: 384, y: 384, a: 0}
+  @corner %{x: 13 * 256 + 128, y: 13 * 256 + 128, a: 49_152}
+
+  def respawn({gx, gy, _hunting}) do
+    if apart(@start, gx, gy) >= apart(@corner, gx, gy), do: @start, else: @corner
+  end
+
+  def respawn(_no_goat), do: new()
+
+  defp apart(%{x: x, y: y}, gx, gy), do: (x - gx) * (x - gx) + (y - gy) * (y - gy)
 
   # The map. Call this once and pass the result to step/4 and frame/4.
   def grid, do: @grid
@@ -162,6 +191,196 @@ defmodule Raycaster.Engine do
       # list wants the rightmost first.
       {^ref, {right_run, right}} -> :lists.reverse(right, join(left_run, right_run, left))
     end
+  end
+
+  @doc """
+  Other players as small figures, to go in front of what `frame/4` returns.
+
+  `others` is a list of `{x, y, colour}`, positions in the same Q8 as the
+  player's, and may hold `{:goat, x, y, hunting}` for the evil goat. A player is
+  a head and a body, the goat a front view of one charging at you, whose eyes go
+  red while `hunting` is true. Both are sized by how far away they are, and left
+  out when behind the player, off to the side of the view, or hidden by a wall.
+  The nearest come first, since the first item is drawn on top.
+
+  Each figure costs a walk along the line to it, not a ray per column, and the
+  test is all or nothing: someone half behind a corner is either seen or not.
+  """
+  def sprites(_grid, _player, [], _width, _height), do: []
+
+  def sprites(grid, %{x: x, y: y, a: angle}, others, width, height) do
+    index = index(angle)
+    dir_x = cos(index)
+    dir_y = sin(index)
+    plane_x = div(-dir_y * 169, 256)
+    plane_y = div(dir_x * 169, 256)
+    # The camera's determinant, over 256 so the quotients below come out in Q8
+    # without a product big enough to be boxed.
+    det = div(plane_x * dir_y - dir_x * plane_y, 256)
+
+    view = {grid, x, y, dir_x, dir_y, plane_x, plane_y, det, width, height}
+
+    # Nearest first: the first item is drawn on top.
+    nearest_first = :lists.keysort(1, figures(view, others, []))
+
+    flatten_figures(nearest_first)
+  end
+
+  defp figures(_view, [], acc), do: acc
+
+  defp figures(view, [{ox, oy, colour} | rest], acc),
+    do: figures(view, rest, place(acc, view, ox, oy, colour))
+
+  defp figures(view, [{:goat, ox, oy, hunting} | rest], acc),
+    do: figures(view, rest, place(acc, view, ox, oy, {:goat, hunting}))
+
+  # `what` is a player's colour, or `{:goat, hunting}`.
+  defp place(acc, view, ox, oy, what) do
+    {_grid, x, y, dir_x, dir_y, plane_x, plane_y, det, _width, _height} = view
+
+    rel_x = ox - x
+    rel_y = oy - y
+    depth = div(plane_x * rel_y - plane_y * rel_x, det)
+    across = div(dir_y * rel_x - dir_x * rel_y, det)
+
+    if depth >= @nearest, do: seen(acc, view, ox, oy, depth, across, what), else: acc
+  end
+
+  # Off to the side of the view costs nothing: the walk along the line to a figure
+  # is only made for one that could be seen, which is a fraction of them.
+  defp seen(acc, view, ox, oy, depth, across, what) do
+    {grid, x, y, _dir_x, _dir_y, _plane_x, _plane_y, _det, width, height} = view
+
+    centre = div(width * (depth + across), 2 * depth)
+    line = div(height * 256, depth)
+
+    if centre + line > 0 and centre - line < width and visible?(grid, x, y, ox, oy) do
+      add_figure(acc, depth, centre, line, what, width, height)
+    else
+      acc
+    end
+  end
+
+  # `line` is how tall a wall would be at this distance. The goat is drawn in
+  # hundredths of `size`, a little more than `line` so that it looms over the
+  # players, with `part/7` below, from the floor line up: 16 of legs, a body to
+  # 36, the head to 50 and horns curling out to 66. The first part is on top, so
+  # eyes and beard come before the head they sit on. Far off, where most parts
+  # would be a pixel, it is five rectangles instead of thirteen.
+  defp add_figure(acc, depth, centre, line, {:goat, hunting}, width, height) do
+    size = div(line * 6, 5)
+    at = {centre, div(height + line, 2), size, width, height}
+
+    fur = shade(@goat_fur, depth)
+    face = shade(@goat_face, depth)
+    dark = shade(@goat_dark, depth)
+    # Unshaded, so they shine out of the dark corridors.
+    eyes = if hunting, do: @goat_angry, else: @goat_calm
+
+    items =
+      if size < @goat_detail do
+        part(at, -7, 43, 4, 3, eyes) ++
+          part(at, 3, 43, 4, 3, eyes) ++
+          part(at, -9, 50, 18, 22, face) ++
+          part(at, -18, 36, 36, 21, fur) ++
+          part(at, -14, 16, 28, 16, dark)
+      else
+        part(at, -7, 43, 4, 3, eyes) ++
+          part(at, 3, 43, 4, 3, eyes) ++
+          part(at, -3, 30, 6, 9, shade(@goat_beard, depth)) ++
+          part(at, -13, 66, 6, 5, dark) ++
+          part(at, 7, 66, 6, 5, dark) ++
+          part(at, -9, 62, 5, 13, dark) ++
+          part(at, 4, 62, 5, 13, dark) ++
+          part(at, -9, 50, 18, 22, face) ++
+          part(at, -19, 47, 10, 5, face) ++
+          part(at, 9, 47, 10, 5, face) ++
+          part(at, -18, 36, 36, 21, fur) ++
+          part(at, -14, 16, 7, 16, dark) ++
+          part(at, 7, 16, 7, 16, dark)
+      end
+
+    [{depth, items} | acc]
+  end
+
+  # `line` is how tall a wall would be at this distance. A figure is 6/10 of it,
+  # standing on the floor line.
+  defp add_figure(acc, depth, centre, line, colour, width, height) do
+    body_h = div(line * 6, 10)
+    floor = div(height + line, 2)
+    head = div(body_h * 3, 10)
+    body_w = max(div(line * 3, 10), 2)
+    shaded = shade(colour, depth)
+
+    left = centre - div(body_w, 2)
+    top = floor - body_h
+
+    items =
+      clip({:rect, left, top + head, body_w, body_h - head, shaded}, width, height) ++
+        clip({:rect, centre - div(head, 2), top, head, head, @skin}, width, height)
+
+    [{depth, items} | acc]
+  end
+
+  # A rectangle of the goat, in hundredths of its size: `left` from the centre, `up`
+  # from the floor to its top, `w` wide and `h` tall. At least a pixel each way,
+  # so a far goat keeps its eyes.
+  defp part({centre, floor, size, width, height}, left, up, w, h, colour) do
+    clip(
+      {:rect, centre + div(size * left, 100), floor - div(size * up, 100),
+       max(div(size * w, 100), 1), max(div(size * h, 100), 1), colour},
+      width,
+      height
+    )
+  end
+
+  defp flatten_figures([]), do: []
+
+  defp flatten_figures([{_depth, items} | rest]),
+    do: :lists.append(items, flatten_figures(rest))
+
+  # Keeps a rectangle on the screen, or drops it.
+  defp clip({:rect, x, y, w, h, colour}, width, height) do
+    left = max(x, 0)
+    top = max(y, 0)
+    right = min(x + w, width)
+    bottom = min(y + h, height)
+
+    if right > left and bottom > top do
+      [{:rect, left, top, right - left, bottom - top, colour}]
+    else
+      []
+    end
+  end
+
+  @doc false
+  # Nothing solid between two points, looked at every quarter cell: how a figure is hidden
+  # from the player, and the goat sees the player.
+  def visible?(grid, x, y, ox, oy) do
+    dx = ox - x
+    dy = oy - y
+    steps = max(div(max(abs(dx), abs(dy)), 64), 1)
+
+    clear?(grid, x, y, dx, dy, steps, 1)
+  end
+
+  defp clear?(_grid, _x, _y, _dx, _dy, steps, i) when i >= steps, do: true
+
+  defp clear?(grid, x, y, dx, dy, steps, i) do
+    if open?(grid, x + div(dx * i, steps), y + div(dy * i, steps)) do
+      clear?(grid, x, y, dx, dy, steps, i + 1)
+    else
+      false
+    end
+  end
+
+  defp shade({r, g, b}, depth) do
+    factor = max(64, 256 - div(depth, 10))
+    div(r * factor, 256) <<< 16 ||| div(g * factor, 256) <<< 8 ||| div(b * factor, 256)
+  end
+
+  defp shade(colour, depth) do
+    shade({colour >>> 16 &&& 255, colour >>> 8 &&& 255, colour &&& 255}, depth)
   end
 
   # `run` is the rectangle being widened: neighbouring columns with the same
@@ -266,7 +485,13 @@ defmodule Raycaster.Engine do
   defp cell(_grid, x, y) when x < 0 or y < 0 or x >= @size or y >= @size, do: 1
   defp cell(grid, x, y), do: elem(grid, y * @size + x)
 
-  defp open?(grid, x, y), do: cell(grid, x >>> 8, y >>> 8) == 0
+  @doc false
+  # Whether the point, in the fixed point, is on floor. Outside the map is wall.
+  def open?(grid, x, y), do: cell(grid, x >>> 8, y >>> 8) == 0
+
+  @doc false
+  # Whether the cell `{column, row}` is floor.
+  def open_cell?(grid, cx, cy), do: cell(grid, cx, cy) == 0
 
   # Darker with distance, and walls facing along y a little darker again, so
   # corners read.
