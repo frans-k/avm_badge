@@ -195,4 +195,16 @@ defmodule Raycaster.EngineTest do
                Engine.sprites(Engine.grid(), player, [{:goat, gx, gy, true}], @width, @height)
     end
   end
+
+  describe "open_mask/0" do
+    test "is the floor of the grid, one bit to a cell at y * 16 + x" do
+      grid = Engine.grid()
+      mask = Engine.open_mask()
+
+      for y <- 0..15, x <- 0..15 do
+        assert Bitwise.band(Bitwise.bsr(mask, y * 16 + x), 1) == 1 ==
+                 Engine.open_cell?(grid, x, y)
+      end
+    end
+  end
 end

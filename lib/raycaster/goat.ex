@@ -16,14 +16,14 @@ defmodule Raycaster.Goat do
 
   Pure, so it is checked on the laptop, and written for AtomVM: `:lists` and `:maps`, plain
   recursion, a small random number generator of its own, and the grid handed in as an argument
-  (see `Raycaster.Engine.grid/0`). The way round a wall is the shortest through the cells, found
-  by a breadth-first search from the goal, as far as the goat, kept until the goal moves to
-  another cell.
+  (see `Raycaster.Engine.grid/0`). The way round a wall is the shortest through the cells,
+  looked up in `Raycaster.Routes`, which is built while compiling.
   """
 
   import Bitwise
 
   alias Raycaster.Engine
+  alias Raycaster.Routes
 
   # Wandering and hunting, in the fixed point per second, by pace.
   @calm {250, 330}
@@ -43,8 +43,10 @@ defmodule Raycaster.Goat do
       goal: nil,
       lost_at: nil,
       seed: rem(abs(seed), 65_537),
-      # `{goal cell, steps from it to every cell}`, for the way round walls.
-      route: nil
+      # `{from cell, goal cell, next cell}`: the last lookup in `Raycaster.Routes`, kept until
+      # the goat or its goal is in another cell. A lookup copies the whole table on AtomVM,
+      # which costs more than the few steps it is good for.
+      way: nil
     }
   end
 
@@ -143,7 +145,7 @@ defmodule Raycaster.Goat do
   # straight to it. Moving between the middles of neighbouring open cells never touches a wall.
   defp route(goat, grid, {gx, gy}, step) do
     here = {goat.x >>> 8, goat.y >>> 8}
-    {goat, next} = next_cell(goat, grid, here, {gx >>> 8, gy >>> 8})
+    {goat, next} = next_cell(goat, here, {gx >>> 8, gy >>> 8})
 
     {tx, ty} =
       case next do
@@ -153,6 +155,13 @@ defmodule Raycaster.Goat do
 
     {x, y} = towards(goat.x, goat.y, tx, ty, step)
     if Engine.open?(grid, x, y), do: %{goat | x: x, y: y}, else: goat
+  end
+
+  defp next_cell(%{way: {here, there, next}} = goat, here, there), do: {goat, next}
+
+  defp next_cell(goat, here, there) do
+    next = Routes.next(here, there)
+    {%{goat | way: {here, there, next}}, next}
   end
 
   defp towards(x, y, tx, ty, step) do
@@ -180,86 +189,5 @@ defmodule Raycaster.Goat do
   defp newton(n, guess) do
     next = div(guess + div(n, guess), 2)
     if next >= guess, do: guess, else: newton(n, next)
-  end
-
-  @doc false
-  # The next cell on a shortest way from `from` to `to`, moving across cell sides only, or
-  # nil when `from` is `to` or there is no way; and the goat, with the search kept for the
-  # next step toward the same cell.
-  #
-  # The search runs out from `to` and stops with the layer that holds `from`: the cells on the
-  # way are all nearer, so they are in it, and a hunt is a few cells, not the whole map. Cells
-  # are keyed by `row * 16 + column`, which a map compares faster than a tuple.
-  def next_cell(goat, _grid, to, to), do: {goat, nil}
-
-  def next_cell(goat, grid, from, to) do
-    case distances(goat, grid, key(from), to) do
-      {goat, nil} -> {goat, nil}
-      {goat, steps} -> {goat, nearest(neighbours(from), steps, nil, :infinity)}
-    end
-  end
-
-  defp key({cx, cy}), do: cy * 16 + cx
-
-  # Kept while it is for the same goal and has reached `from`; a goat pushed off the cells the
-  # search covered gets a new one.
-  defp distances(%{route: {to, steps}} = goat, grid, from, to) do
-    case :maps.is_key(from, steps) do
-      true -> {goat, steps}
-      false -> search(goat, grid, from, to)
-    end
-  end
-
-  defp distances(goat, grid, from, to), do: search(goat, grid, from, to)
-
-  defp search(goat, grid, from, to) do
-    steps = bfs(grid, [to], :maps.put(key(to), 0, %{}), from, 0)
-
-    case :maps.is_key(from, steps) do
-      true -> {%{goat | route: {to, steps}}, steps}
-      false -> {goat, nil}
-    end
-  end
-
-  defp nearest([], _steps, best, _best_steps), do: best
-
-  defp nearest([cell | rest], steps, best, best_steps) do
-    case :maps.find(key(cell), steps) do
-      {:ok, n} when best_steps == :infinity or n < best_steps ->
-        nearest(rest, steps, cell, n)
-
-      _no_better ->
-        nearest(rest, steps, best, best_steps)
-    end
-  end
-
-  defp neighbours({cx, cy}), do: [{cx + 1, cy}, {cx - 1, cy}, {cx, cy + 1}, {cx, cy - 1}]
-
-  defp bfs(_grid, [], seen, _from, _steps), do: seen
-
-  defp bfs(grid, frontier, seen, from, steps) do
-    {next, seen} = expand(grid, frontier, seen, steps + 1, [])
-
-    case :maps.is_key(from, seen) do
-      true -> seen
-      false -> bfs(grid, next, seen, from, steps + 1)
-    end
-  end
-
-  defp expand(_grid, [], seen, _steps, acc), do: {acc, seen}
-
-  defp expand(grid, [cell | rest], seen, steps, acc) do
-    {acc, seen} = visit(grid, neighbours(cell), seen, steps, acc)
-    expand(grid, rest, seen, steps, acc)
-  end
-
-  defp visit(_grid, [], seen, _steps, acc), do: {acc, seen}
-
-  defp visit(grid, [{cx, cy} = cell | rest], seen, steps, acc) do
-    k = key(cell)
-
-    if Engine.open_cell?(grid, cx, cy) and not :maps.is_key(k, seen),
-      do: visit(grid, rest, :maps.put(k, steps, seen), steps, [cell | acc]),
-      else: visit(grid, rest, seen, steps, acc)
   end
 end

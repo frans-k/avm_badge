@@ -63,6 +63,15 @@ defmodule Raycaster.Engine do
         end)
         |> List.to_tuple()
 
+  # The floor as one integer, bit `y * 16 + x` set where column `x` of row `y` is floor: for
+  # code that works on the whole map at once, see Raycaster.Routes. The outer ring is wall, so
+  # the highest bit is 238 and shifting a row off one side never lands on floor on the other.
+  @open_mask (for {row, y} <- Enum.with_index(@rows),
+                  {?., x} <- Enum.with_index(String.to_charlist(row)),
+                  reduce: 0 do
+                bits -> bits ||| 1 <<< (y * 16 + x)
+              end)
+
   @ceiling 0x202838
   @floor 0x504030
 
@@ -116,6 +125,9 @@ defmodule Raycaster.Engine do
   def grid, do: @grid
 
   def cols, do: @cols
+
+  @doc "The floor as one integer, a bit for each cell, `y * 16 + x`."
+  def open_mask, do: @open_mask
 
   # Held keys are labels from Raycaster.Keymap, binaries or charlists.
   def step(grid, state, held, dt_ms) do
