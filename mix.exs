@@ -63,8 +63,8 @@ defmodule Badge.MixProject do
       # The Erlang side of the port driver built into the VM. A rebar3
       # project, so mix is told which manager to use.
       {:atomvm_websocket_client,
-       github: "nerves-hub/atomvm_websocket_client",
-       ref: "011b99c30bea5253eb29558e3c6ac420a5472c0f",
+       github: "protolux-electronics/atomvm_websocket_client",
+       ref: "c877b3643144674b6b14ac612a9e29a8cbe6fcd4",
        manager: :rebar3},
       # The packbeam escript, from Hex rather than an AtomVM checkout.
       {:atomvm_packbeam, "~> 0.8.2", runtime: false},

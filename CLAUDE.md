@@ -270,10 +270,10 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
 - **ExAtomVM writes no `priv/application.bin`**, and the updater identifies
   the firmware from it. `mix atomvm.application_bin` writes it and is aliased
   onto `atomvm.packbeam` and `atomvm.esp32.flash`
-- The updater takes the NervesHub components from the checkouts beside this
-  repo (`../nerves_hub_link_atomvm_esp32`, `…_ex`, `../atomvm_websocket_client`)
-  as path deps. `updater/lib/shared/` links firmware modules (pins, NVS, chip
-  id, display) into it
+- The updater takes the NervesHub components from the protolux forks as git
+  deps pinned to a commit (`update_slot` lives on the agent fork's
+  `single-slot` branch). No path deps. `updater/lib/shared/` links firmware
+  modules (pins, NVS, chip id, display) into it
 - The agent drops socket messages whose handle is not the one `open`
   returned, and the driver's never is. `Badge.Update.Transport` (in the
   updater) relays the socket under its own pid; never drop the `transport:`
