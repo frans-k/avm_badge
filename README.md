@@ -111,8 +111,14 @@ verified on hardware instead. `mix test` needs no board.
 ## NervesHub
 
 Over-the-air updates work out of the box: the badge product's shared secret is
-compiled into `Badge.Update.Link`, so firmware you built yourself updates from
-the same hub as everyone else's. Open Settings → Update to see it.
+compiled into the updater (`updater/`), so firmware you built yourself updates
+from the same hub as everyone else's. Settings → Update → Enter restarts into
+the updater, which installs whatever NervesHub offers into `main.avm` and
+restarts back into the firmware.
+
+The updater is its own packbeam in the `updater.avm` partition and is not
+updated over the air. `mix badge.updater` builds it and writes it to the
+board.
 
 To point a badge at your own product instead, export your credentials and
 provision them into NVS, where they override the built-in pair:
@@ -147,9 +153,15 @@ phy_init    data  phy      0xf000      4K
 factory     app   factory  0x10000  1920K
 boot.avm    data  phy      0x1f0000  544K
 assets.avm  data  phy      0x278000  256K
-main.avm    data  phy      0x2b8000  656K
-alt.avm     data  phy      0x35c000  656K
+updater.avm data  phy      0x2b8000  192K
+main.avm    data  phy      0x2e8000 1120K
 ```
+
+`esp32init` runs `main.avm` unless NVS `atomvm/boot_path` names another pack;
+the firmware points it at `updater.avm` to install an update. Badges flashed
+before this layout (base image badge-v2 and older) had `main.avm` and `alt.avm`
+at 656K each and need a cable reflash of the base image, the updater and the
+firmware.
 
 This table is compiled into the AtomVM image. Changing it means a serial
 reflash of every badge.
@@ -227,4 +239,5 @@ submodules fit in. The upstream
 build system, packbeam format and NIF interface.
 
 Once built, flash the VM at `0x10000` and `boot.avm` at `0x1F0000`; both must
-come from the same build. The application at `0x2B8000` survives.
+come from the same build. The updater at `0x2B8000` and the application at
+`0x2E8000` survive.

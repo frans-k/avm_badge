@@ -9,7 +9,8 @@ defmodule Mix.Tasks.Badge.Base do
       mix badge.base --vm-only    # just the VM and boot.avm
       mix badge.base --fetch-only # download and verify into .base/, write nothing
 
-  The application at 0x2B8000 survives either flash. `boot.avm` holds the
+  The updater at 0x2B8000 and the application at 0x2E8000 survive either
+  flash. `boot.avm` holds the
   standard libraries the VM starts from, so it is always written with the VM.
   `--full` is accepted and does nothing, since it is now the default.
   """

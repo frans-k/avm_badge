@@ -15,7 +15,7 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
   it reads off the board. The port auto-detects; never pass `--port`
 - The check's `warning: missing atomvm dependency` is expected: the standard
   library is the fork's `boot.avm`, and the `atomvm` package would pack a
-  second copy into the 656K slot
+  second copy into the 1120K slot
 - `mix atomvm.esp32.flash`, `mix badge.base` and `mix badge.assets --flash`
   run esptool through Pythonx (`ExAtomVM.EsptoolHelper`), which fetches
   Python and esptool on first use; nothing needs to be on PATH
@@ -38,8 +38,8 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
 - Never run unbounded `cat`/`screen` on the port, and give the monitor a
   `--timeout` — an open port blocks the next flash
 - `Badge.Log` is the group leader of everything the badge spawns: each
-  `io:format` line is echoed, kept for the Settings Log tab, and forwarded to
-  the hub while the agent is up. ESP-IDF's own `I (…)` lines are not seen
+  `io:format` line is echoed and kept for the Settings Log tab. ESP-IDF's own
+  `I (…)` lines are not seen
 - Reflashing never erases NVS, so wifi credentials, profile and peers survive
 
 ## Flash layout
@@ -47,16 +47,18 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
 - `boot.avm` at `0x1F0000` (544K) holds the standard libraries the VM starts
   from. Without a valid one the VM aborts before any Elixir runs — `E AtomVM:
   Invalid startup avmpack`, then a reboot loop
-- Two packbeam slots: `main.avm` at `0x2B8000` and `alt.avm` at `0x35C000`,
-  656K each. NervesHub writes whichever is not running and flips
-  `atomvm`/`boot_path` in NVS
+- `updater.avm` at `0x2B8000` (192K) holds the updater, `updater/`, its own
+  Mix project. `mix badge.updater` builds and writes it; it is **not** updated
+  over the air
+- `main.avm` at `0x2E8000` (1120K) holds the firmware. There is one slot and
+  no rollback
 - `assets.avm` at `0x278000` holds the rickroll frames, the `.uf` fonts and
   the splash logo, mounted by `Badge.start/0`. `mix badge.assets --flash`
   packs and writes it; it is **not** updated over the air
 - `python3 tools/check_partitions.py <partitions.csv> [label=path ...]` fails
   if an artifact outgrows its partition
-- `mix badge.fits` refuses to flash a `main.avm`/`alt.avm` build over 656K
-  (0xA4000 = 671,744 bytes); wired into `mix atomvm.esp32.flash`
+- `mix badge.fits` refuses to flash a `main.avm` build over 1120K
+  (0x118000 = 1,146,880 bytes); wired into `mix atomvm.esp32.flash`
 - A missing assets partition is survivable: the badge boots, prints
   `Badge: no assets partition:` and skips the splash. `:atomvm.read_priv/2`
   answers `:undefined` rather than raising, so a guard that only catches will
@@ -204,8 +206,8 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
   `wss://badge-chat.protolux.io`. The scheme picks the transport: `wss://`
   verifies against the ESP-IDF CA bundle, `ws://` runs in the clear for a
   server on the bench
-- `Badge.Chat.Link` and `Badge.Update.Link` are page-scoped: they connect on
-  entry and disconnect on the way out
+- `Badge.Chat.Link` is page-scoped: it connects on entry and disconnects on
+  the way out
 
 ## Clustering
 
@@ -248,27 +250,35 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
 
 ## Firmware updates
 
-- `Badge.Update.Link` owns the NervesHub agent and runs only while the Update
-  tab shows; elsewhere the badge is offline to NervesHub. Updates and reboots
-  are both `manual`, so nothing installs without a keypress
-- The product's shared secret is **compiled into `Badge.Update.Link`**, so a
+- The firmware does not talk to NervesHub. Settings → Update → Enter calls
+  `Badge.Update.start/0`, which points NVS `atomvm/boot_path` at
+  `updater.avm` and restarts
+- The updater (`updater/`, `Badge.Updater`) joins NervesHub as the firmware
+  in `main.avm`, installs any update into it with the agent's `update_slot`,
+  clears `boot_path` and restarts into the firmware. Up to date, or a failure
+  that left `main.avm` whole, also goes back to the firmware
+- Once a download has started erasing `main.avm` there is no going back: the
+  badge stays in the updater and every restart tries again until an update
+  lands or someone reflashes by cable
+- `esp32init` falls back to `main.avm` when the pack named by `boot_path`
+  cannot be opened, so a stale `alt.avm` from before this layout still boots
+- The product's shared secret is **compiled into `Badge.Updater`**, so a
   badge flashed from a clone updates itself with no provisioning. NVS keys
   `nh_key`, `nh_secret` and optional `nh_host` override it per badge, written
   by `tools/provision.py`. The repo is public, so rotating the credential in
   NervesHub is the only way to withdraw it
-- **ExAtomVM writes no `priv/application.bin`**, and `firmware: boot` needs
-  one. `mix atomvm.application_bin` writes it and is aliased onto
-  `atomvm.packbeam` and `atomvm.esp32.flash`
-- There is **no automatic rollback**. `:nh_ota.revert/0` is on the Update tab;
-  firmware that will not boot needs a cable
-- The agent commits a pending update when it joins, so opening the Update tab
-  is what takes new firmware off trial
-- `Badge.Update.Link` reads flash and opens its socket in spawned processes,
-  never its own: `status/0` is called from the render loop
-- The agent (hex 0.2.0) drops socket messages whose handle is not the one
-  `open` returned, and the driver's never is, so it times out with
-  `connect_timeout` after the TLS handshake. `Badge.Update.Transport` relays
-  the socket under its own pid; never drop the `transport:` option
+- **ExAtomVM writes no `priv/application.bin`**, and the updater identifies
+  the firmware from it. `mix atomvm.application_bin` writes it and is aliased
+  onto `atomvm.packbeam` and `atomvm.esp32.flash`
+- The updater takes the NervesHub components from the checkouts beside this
+  repo (`../nerves_hub_link_atomvm_esp32`, `…_ex`, `../atomvm_websocket_client`)
+  as path deps. `updater/lib/shared/` links firmware modules (pins, NVS, chip
+  id, display) into it
+- The agent drops socket messages whose handle is not the one `open`
+  returned, and the driver's never is. `Badge.Update.Transport` (in the
+  updater) relays the socket under its own pid; never drop the `transport:`
+  option
+- The updater starts `:ssl` itself; the agent's download needs it
 
 ## Provisioning
 
