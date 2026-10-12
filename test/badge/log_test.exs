@@ -63,49 +63,4 @@ defmodule Badge.LogTest do
       assert_receive {:io_reply, ^ref, {:error, :request}}
     end
   end
-
-  describe "forwarding" do
-    test "nothing is sent until an agent is named", %{log: log} do
-      print_from_elsewhere(log, "quiet\n")
-
-      refute_receive {:push_extension, _event, _line}
-    end
-
-    test "lines go to the agent as hub log lines", %{log: log} do
-      Log.forward(self())
-      print_from_elsewhere(log, "loud\n")
-
-      assert_receive {:push_extension, "logging:send", %{"message" => "loud"}}
-    end
-
-    test "the agent's own prints are not sent back to it", %{log: log} do
-      Log.forward(self())
-      :io.put_chars(log, "echo\n")
-
-      refute_receive {:push_extension, _event, _line}
-    end
-
-    test "clearing the agent stops the flow", %{log: log} do
-      Log.forward(self())
-      print_from_elsewhere(log, "first\n")
-      assert_receive {:push_extension, _event, _line}
-
-      Log.forward(nil)
-      print_from_elsewhere(log, "second\n")
-
-      refute_receive {:push_extension, _event, _line}
-    end
-  end
-
-  # From another process, since the test process is standing in for the agent.
-  defp print_from_elsewhere(log, text) do
-    parent = self()
-
-    spawn(fn ->
-      :io.put_chars(log, text)
-      send(parent, :printed)
-    end)
-
-    assert_receive :printed
-  end
 end

@@ -4,8 +4,7 @@ defmodule Badge.Log do
 
   `capture/0` makes this the group leader of the caller and everything it
   spawns afterwards, so `Badge.start/0` calls it first. Every line printed is
-  echoed to the console, kept for `tail/1`, and sent to the NervesHub agent
-  named by `forward/1`. ESP-IDF's own `I (…)` lines are written from C and
+  echoed to the console and kept for `tail/1`. ESP-IDF's own `I (…)` lines are written from C and
   never pass through here. Off the badge, where there is no `:console`, the
   echo goes to whatever this process was started under, so a host sees the
   lines too.
@@ -13,7 +12,7 @@ defmodule Badge.Log do
 
   use GenServer
 
-  @compile {:no_warn_undefined, [:console, NervesHubLink]}
+  @compile {:no_warn_undefined, :console}
 
   @keep 40
   @width 80
@@ -35,10 +34,6 @@ defmodule Badge.Log do
   @spec tail(pos_integer) :: [binary]
   def tail(count), do: GenServer.call(__MODULE__, {:tail, count})
 
-  @doc "Sends every line that follows to a NervesHub agent, or with `nil` to nobody."
-  @spec forward(pid | nil) :: :ok
-  def forward(agent), do: GenServer.cast(__MODULE__, {:forward, agent})
-
   @impl true
   def init(:ok) do
     console = :erlang.group_leader()
@@ -46,7 +41,7 @@ defmodule Badge.Log do
     # Its own leader, so a print from here cannot queue behind itself.
     :erlang.group_leader(self(), self())
 
-    {:ok, %{lines: [], agent: nil, console: console}}
+    {:ok, %{lines: [], console: console}}
   end
 
   @impl true
@@ -54,8 +49,10 @@ defmodule Badge.Log do
     {:reply, :lists.reverse(:lists.sublist(state.lines, count)), state}
   end
 
+  # Nothing casts here. Defined anyway: GenServer's default calls
+  # `:erlang.phash2/2`, which AtomVM does not have.
   @impl true
-  def handle_cast({:forward, agent}, state), do: {:noreply, %{state | agent: agent}}
+  def handle_cast(_request, state), do: {:noreply, state}
 
   @impl true
   def handle_info({:io_request, from, ref, request}, state) do
@@ -100,11 +97,10 @@ defmodule Badge.Log do
   defp handle(:getopts, _from, state), do: {[], state}
   defp handle(_unknown, _from, state), do: {{:error, :request}, state}
 
-  defp write(chars, from, state) do
+  defp write(chars, _from, state) do
     echo(chars, state.console)
 
     lines = lines(chars)
-    send_lines(lines, from, state.agent)
 
     {:ok, %{state | lines: :lists.sublist(:lists.reverse(lines) ++ state.lines, @keep)}}
   end
@@ -119,15 +115,6 @@ defmodule Badge.Log do
     :io.put_chars(console, chars)
   catch
     _kind, _error -> :ok
-  end
-
-  defp send_lines([], _from, _agent), do: :ok
-  defp send_lines(_lines, _from, nil), do: :ok
-  # The agent printing while it sends would be asked to send that too, and so on.
-  defp send_lines(_lines, agent, agent), do: :ok
-
-  defp send_lines(lines, _from, agent) do
-    :lists.foreach(fn line -> NervesHubLink.send_log(agent, :info, line) end, lines)
   end
 
   defp lines(chars) do

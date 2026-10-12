@@ -5,8 +5,7 @@ defmodule Badge.Chat.Link do
   Socket and channel share one lifetime, and it is the chat page's. `open/0`
   connects and joins the rooms channel; `enter/1` and `leave_room/0` move
   between rooms on the same socket; `close/0` disconnects. A badge on the home
-  grid holds no socket at all, which is what lets `Badge.Update.Link` have one
-  when it needs it.
+  grid holds no socket at all.
 
   Entering the page therefore costs a TLS handshake before the first line can
   be sent, and the page reads as connecting until it lands.

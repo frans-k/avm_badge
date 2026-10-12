@@ -51,7 +51,6 @@ defmodule Badge.UI do
   alias Badge.Skin
   alias Badge.Sleep
   alias Badge.Theme
-  alias Badge.Update
   alias Badge.Wifi
 
   @compile {:no_warn_undefined, :atomvm}
@@ -410,7 +409,7 @@ defmodule Badge.UI do
   end
 
   defp holds do
-    %{usb: Power.usb_present?(), downloading: Update.Link.status().state == :downloading}
+    %{usb: Power.usb_present?()}
   end
 
   # The radio is parked before the CPU, so the disconnect is out before it stops.

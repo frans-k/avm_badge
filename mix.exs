@@ -66,8 +66,6 @@ defmodule Badge.MixProject do
        github: "nerves-hub/atomvm_websocket_client",
        ref: "011b99c30bea5253eb29558e3c6ac420a5472c0f",
        manager: :rebar3},
-      # The NervesHub agent's Elixir face, which brings the agent with it.
-      {:nerves_hub_link_atomvm_esp32_ex, "~> 0.2.0"},
       # The packbeam escript, from Hex rather than an AtomVM checkout.
       {:atomvm_packbeam, "~> 0.8.2", runtime: false},
       # The browser side of the simulator, absent from the badge build.

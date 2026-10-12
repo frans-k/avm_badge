@@ -7,8 +7,9 @@ defmodule Mix.Tasks.Atomvm.ApplicationBin do
   normal build produces one.
 
   ExAtomVM does not write this file and has no option to. Without it
-  `:nh_flash.read_metadata/0` answers `no_application_metadata`, the agent
-  refuses to start, and NervesHub cannot parse an upload.
+  `:nh_flash.read_metadata/1` answers `no_application_metadata`, the updater
+  cannot tell NervesHub what is installed, and NervesHub cannot parse an
+  upload.
   """
 
   use Mix.Task

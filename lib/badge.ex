@@ -28,7 +28,7 @@ defmodule Badge do
 
     :io.format(~c"Badge: starting~n")
 
-    # Rickroll frames live in their own partition, shared by both OTA slots.
+    # Rickroll frames live in their own partition, which updates leave alone.
     case :atomvm.add_avm_pack_file(~c"/dev/partition/by-name/assets.avm", name: :assets) do
       :ok -> :ok
       {:error, reason} -> :io.format(~c"Badge: no assets partition: ~p~n", [reason])
@@ -51,7 +51,6 @@ defmodule Badge do
       {Badge.Power, :ok},
       {Badge.Ir.Link, :ok},
       {Badge.Chat.Link, :ok},
-      {Badge.Update.Link, :ok},
       {Badge.Cluster.Link, :ok},
       {Badge.Clock.Keeper, :ok},
       {Badge.Schedule.Link, :ok}

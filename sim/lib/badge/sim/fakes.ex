@@ -43,19 +43,6 @@ defmodule Badge.Sim.Fakes do
         end,
         fn {:held, labels}, d -> Map.put(d, :held, labels) end
       ),
-      fake(Badge.Update.Link, fn :status, _ ->
-        %{
-          identifier: "90DA72000001",
-          state: :current,
-          percent: 0,
-          offer: nil,
-          reason: nil,
-          firmware: %{name: "avm_badge", version: "sim", sha: "deadbeef"},
-          slot: "main.avm",
-          target: nil,
-          trial: false
-        }
-      end),
       fake(Badge.Chat.Link, fn :status, _ -> State.status(State.new("ws://sim")) end),
       fake(
         Badge.Cluster.Link,
