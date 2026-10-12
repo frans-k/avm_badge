@@ -11,14 +11,25 @@ defmodule Badge.Update do
 
   @compile {:no_warn_undefined, :esp}
 
-  @updater "/dev/partition/by-name/updater.avm"
+  @partition "updater.avm"
+  @updater "/dev/partition/by-name/" <> @partition
   @version Mix.Project.config()[:version]
 
   @doc "This firmware's version, as NervesHub knows it."
   @spec version() :: binary
   def version, do: @version
 
-  @doc "Restarts into the updater."
+  @doc """
+  Whether this badge has an updater partition. One still on the A/B layout
+  does not, and a `boot_path` naming it would leave such a badge (whose
+  `esp32init` has no fallback) in dev mode until it is reflashed by cable.
+  """
+  @spec available?() :: boolean
+  def available? do
+    :lists.keymember(@partition, 1, :esp.partition_list())
+  end
+
+  @doc "Restarts into the updater. Check `available?/0` first."
   @spec start() :: no_return
   def start do
     :io.format(~c"Update: restarting into the updater~n")

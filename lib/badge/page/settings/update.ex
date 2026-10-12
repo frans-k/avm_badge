@@ -24,9 +24,11 @@ defmodule Badge.Page.Settings.Update do
   def title, do: "Update"
 
   @impl true
-  def init, do: %{confirm: false}
+  def init, do: %{confirm: false, updater: Badge.Update.available?()}
 
   @impl true
+  def handle_key({:edit, :newline}, %{updater: false}), do: :ignore
+
   def handle_key({:edit, :newline}, %{confirm: false} = state),
     do: {:ok, %{state | confirm: true}}
 
@@ -43,6 +45,21 @@ defmodule Badge.Page.Settings.Update do
   def handle_key(_event, _state), do: :ignore
 
   @impl true
+  def render(%{updater: false}) do
+    [
+      Readout.right_row(
+        "running",
+        "avm_badge " <> Badge.Update.version(),
+        @running_y,
+        Theme.fg()
+      ),
+      Readout.right_row("id", Identity.format(Identity.chip_id()), @id_y, Theme.fg()),
+      text(@about_y, "This badge has no updater.", Theme.warn()),
+      text(@about_y + Readout.pitch(), "Reflash it by cable first.", Theme.dim())
+    ]
+    |> :lists.flatten()
+  end
+
   def render(%{confirm: confirm}) do
     [
       Readout.right_row(

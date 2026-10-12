@@ -19,7 +19,11 @@ defmodule Badge.Page.Settings.UpdateTest do
     end
 
     test "starts with no question asked" do
-      assert Update.init() == %{confirm: false}
+      assert Update.init().confirm == false
+    end
+
+    test "knows whether the badge has an updater" do
+      assert Update.init().updater == true
     end
   end
 
@@ -58,6 +62,19 @@ defmodule Badge.Page.Settings.UpdateTest do
     end
   end
 
+  describe "a badge without an updater" do
+    test "says it needs a cable instead of offering a check" do
+      bare = %{Update.init() | updater: false}
+
+      assert says?(bare, "no updater")
+      refute says?(bare, "Enter check for updates")
+    end
+
+    test "Enter does nothing" do
+      assert Update.handle_key({:edit, :newline}, %{Update.init() | updater: false}) == :ignore
+    end
+  end
+
   describe "the carousel" do
     test "the arrows slide between tabs at rest" do
       assert Update.handle_key({:move, :left}, Update.init()) == :ignore
@@ -74,7 +91,13 @@ defmodule Badge.Page.Settings.UpdateTest do
 
   describe "drawing inside the lines" do
     test "both states fit the content area" do
-      for state <- [Update.init(), %{Update.init() | confirm: true}] do
+      states = [
+        Update.init(),
+        %{Update.init() | confirm: true},
+        %{Update.init() | updater: false}
+      ]
+
+      for state <- states do
         for {:text, x, y, _f, _c, _b, body} <- Update.render(state) do
           assert y >= Settings.content_top()
           assert y < Theme.height()
