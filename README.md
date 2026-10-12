@@ -34,6 +34,7 @@ Plug the badge in over USB, then:
     mix deps.get
     mix badge.base             # once per board: bootloader, VM, boot.avm
     mix badge.assets --flash   # once per board: fonts, icons, splash logo
+    mix badge.updater          # once per board: the NervesHub updater
     mix atomvm.esp32.flash     # the firmware itself, every time
 
 The first of these to flash downloads Python and esptool, so it needs a
@@ -64,6 +65,17 @@ air, so run it again whenever anything under `assets/` changes — see
 
 Reflashing leaves NVS alone, so the profile, the badges you have collected and
 the wifi credentials all survive.
+
+### Moving a badge from 0.1.x
+
+Firmware 0.2.0 needs base image badge-v3, which changes the flash layout (one
+1120K firmware slot and an updater instead of two 656K slots). A badge running
+0.1.x cannot get there over the air; plug it in and run all four steps above,
+in order. `mix badge.base` writes the new partition table, so the old
+firmware slots are gone afterwards. NVS is kept.
+
+A 0.1.x badge that receives 0.2.0 from NervesHub still boots it, but its
+Settings → Update says the badge has no updater until it is reflashed.
 
 ### Flashing a batch
 
@@ -126,6 +138,22 @@ provision them into NVS, where they override the built-in pair:
     export BADGE_NH_KEY=...
     export BADGE_NH_SECRET=...
     python3 tools/provision.py
+
+### Publishing a release
+
+Firmware lives in the `avm_badge` product of the `goatmire` organization. Bump
+`version` in `mix.exs`, tag it, then build and upload the packbeam with the
+[`nh` CLI](https://github.com/nerves-hub/nh):
+
+    git tag v0.2.0 && git push origin v0.2.0
+    mix atomvm.packbeam
+    cp avm_badge.avm avm_badge-0.2.0.avm
+    nh firmware upload avm_badge-0.2.0.avm --org goatmire --product avm_badge --skip-signing
+
+Uploading does not ship it: badges get it once a deployment group points at it
+(`nh deployment ...`, or `--deploy <group>` on the upload). The badges check
+no signatures yet, so the upload is unsigned. Only the firmware goes up; the
+updater and base image reach a badge by cable.
 
 ## Chat server
 
@@ -232,7 +260,7 @@ unchanged, so provisioning one key never loses the others.
 The VM, its AtomGL display driver and the websocket component are built from
 the fork at
 [protolux-electronics/AtomVM](https://github.com/protolux-electronics/AtomVM).
-Its `src/platforms/esp32/BADGE-BUILD.md` documents how to reproduce a badge
+Its `src/platforms/esp32/badge/README.md` documents how to reproduce a badge
 build, which CMake flags this board needs, and how the AtomGL and websocket
 submodules fit in. The upstream
 [AtomVM documentation](https://www.atomvm.net/doc/main/) covers the VM's own
