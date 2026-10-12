@@ -1,8 +1,16 @@
 defmodule Badge.Updater.Screen do
   @moduledoc """
-  The updater's one screen: a title, a status line, and a progress bar while a
-  download runs. Drawn with AtomGL's built-in font, so it needs nothing from
-  the assets partition or the firmware's fonts.
+  The updater's one screen, drawn with AtomGL's built-in font so it needs
+  nothing from the assets partition or the firmware's fonts.
+
+  A view is a map:
+
+    * `:status` — the line that says what is happening, always shown
+    * `:detail` — a quieter line under it, such as the versions involved
+    * `:progress` — a percentage for the bar, or `nil` for none
+    * `:tone` — `:error` draws the status as a failure
+    * `:warn` — `true` while flash is being written: the badge must stay on
+    * `:footer` — what is installed, along the bottom
   """
 
   alias Badge.Display
@@ -12,13 +20,25 @@ defmodule Badge.Updater.Screen do
 
   @bg 0x000000
   @fg 0xFFFFFF
-  @dim 0x606060
+  @dim 0x808080
+  @track 0x404040
   @accent 0x00E5A0
+  @warn 0xFFB000
   @error 0xFF5050
+
+  @title "Firmware update"
+  @warning "Do not turn off your badge"
 
   @char_w 8
   @margin 16
   @bar_h 12
+
+  @title_y 36
+  @status_y 84
+  @detail_y 108
+  @bar_y 140
+  @warn_y 172
+  @footer_y 216
 
   @doc "Opens the display SPI bus and the AtomGL port."
   @spec open() :: {module, port}
@@ -37,40 +57,53 @@ defmodule Badge.Updater.Screen do
     {Display.AtomGL, Display.AtomGL.open(spi)}
   end
 
-  @doc """
-  Draws the screen. `progress` is a percentage, `nil` for no bar, or
-  `:error` to show the status line as a failure.
-  """
-  @spec show({module, port}, binary, binary, non_neg_integer | nil | :error) :: :ok
-  def show(display, title, status, progress \\ nil) do
-    Display.update(display, items(title, status, progress))
-  end
+  @doc "Draws a view."
+  @spec show({module, port}, map) :: :ok
+  def show(display, view), do: Display.update(display, items(view))
 
-  @doc "The display list for a screen, background last."
-  @spec items(binary, binary, non_neg_integer | nil | :error) :: [tuple]
-  def items(title, status, progress) do
+  @doc "The display list for a view, background last."
+  @spec items(map) :: [tuple]
+  def items(view) do
     width = Hardware.display_width()
     height = Hardware.display_height()
 
-    colour = if progress == :error, do: @error, else: @fg
+    status_colour = if Map.get(view, :tone) == :error, do: @error, else: @fg
 
-    [
-      {:text, centred(title, width), 80, :default16px, @accent, @bg, title},
-      {:text, centred(status, width), 112, :default16px, colour, @bg, status}
-    ] ++ bar(progress, width) ++ [{:rect, 0, 0, width, height, @bg}]
+    :lists.flatten([
+      line(@title, @title_y, @accent, width),
+      line(Map.fetch!(view, :status), @status_y, status_colour, width),
+      line(Map.get(view, :detail), @detail_y, @dim, width),
+      bar(Map.get(view, :progress), width),
+      if(Map.get(view, :warn, false), do: line(@warning, @warn_y, @warn, width), else: []),
+      line(Map.get(view, :footer), @footer_y, @dim, width),
+      {:rect, 0, 0, width, height, @bg}
+    ])
   end
 
+  defp line(nil, _y, _colour, _width), do: []
+
+  defp line(text, y, colour, width) do
+    {:text, centred(text, width), y, :default16px, colour, @bg, fit(text, width)}
+  end
+
+  # Fill first, so the track shows through as the remainder.
   defp bar(percent, width) when is_integer(percent) do
     inner = width - 2 * @margin
-    filled = div(inner * min(percent, 100), 100)
+    filled = div(inner * max(min(percent, 100), 0), 100)
 
     [
-      {:rect, @margin, 150, filled, @bar_h, @accent},
-      {:rect, @margin, 150, inner, @bar_h, @dim}
+      {:rect, @margin, @bar_y, filled, @bar_h, @accent},
+      {:rect, @margin, @bar_y, inner, @bar_h, @track}
     ]
   end
 
   defp bar(_none, _width), do: []
 
-  defp centred(text, width), do: max(div(width - @char_w * byte_size(text), 2), 0)
+  defp centred(text, width), do: max(div(width - @char_w * byte_size(fit(text, width)), 2), 0)
+
+  defp fit(text, width) do
+    columns = div(width, @char_w)
+
+    if byte_size(text) > columns, do: :binary.part(text, 0, columns), else: text
+  end
 end
