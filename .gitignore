@@ -21,3 +21,7 @@ tools/.mise.local.toml
 # mise: local tool versions and env, which may hold secrets
 mise.toml
 mise.local.toml
+
+# The updater project
+/updater/_build/
+/updater/deps/

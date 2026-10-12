@@ -1,0 +1,1 @@
+../../../lib/badge/display/atom_gl.ex
