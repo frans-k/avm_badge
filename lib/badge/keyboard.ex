@@ -238,7 +238,7 @@ defmodule Badge.Keyboard do
     :io.format(~c"Sleep: woke after ~ps (~p), restarting~n", [div(slept, 1000), result])
 
     # A fresh boot rather than a resume; see the light-sleep spec in ../docs.
-    :esp.restart()
+    # :esp.restart()
 
     state
   end

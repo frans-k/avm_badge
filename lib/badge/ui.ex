@@ -425,6 +425,11 @@ defmodule Badge.UI do
   defp wake(state) do
     Backlight.wake()
     Pixels.wake()
+    case Wifi.status() do
+      %{radio: :disabled} -> 
+        Wifi.resume()
+        :io.format(~c"UI: woke up wifi. Status: ~p~n", [Wifi.status()])
+    end
 
     %{state | asleep: false, idle: 0, dirty: true, countdown: 0}
   end
