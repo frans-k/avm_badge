@@ -5,6 +5,11 @@ defmodule Badge.Page.Settings.UpdateTest do
   alias Badge.Page.Settings.Update
   alias Badge.Theme
 
+  @online %{radio: :connected, ssid: "Badgenet"}
+  @charged %{usb: false, battery_mv: 4000, vbus_mv: 0}
+
+  defp ready, do: %{Update.init() | wifi: @online, power: @charged}
+
   defp bodies(state) do
     for {:text, _x, _y, _f, _c, _b, body} <- Update.render(state), do: body
   end
@@ -40,14 +45,23 @@ defmodule Badge.Page.Settings.UpdateTest do
       assert says?(Update.init(), "updater")
     end
 
-    test "how to check" do
-      assert says?(Update.init(), "Enter check for updates")
+    test "how to check, once the badge is ready" do
+      assert says?(ready(), "Enter check for updates")
+    end
+
+    test "the network it is on" do
+      assert says?(ready(), "Badgenet")
+    end
+
+    test "the battery, or that it is on USB" do
+      assert says?(ready(), "77%")
+      assert says?(%{ready() | power: %{@charged | usb: true}}, "on USB")
     end
   end
 
   describe "confirming" do
     test "Enter asks before restarting" do
-      assert {:ok, %{confirm: true} = asked} = Update.handle_key({:edit, :newline}, Update.init())
+      assert {:ok, %{confirm: true} = asked} = Update.handle_key({:edit, :newline}, ready())
       assert says?(asked, "restart now?")
     end
 
@@ -62,16 +76,48 @@ defmodule Badge.Page.Settings.UpdateTest do
     end
   end
 
+  describe "what has to be true first" do
+    test "nothing is offered before Wi-Fi has been looked at" do
+      assert Update.blocker(Update.init()) == "Checking Wi-Fi..."
+      assert Update.handle_key({:edit, :newline}, Update.init()) == :ignore
+    end
+
+    test "no Wi-Fi, no check" do
+      offline = %{ready() | wifi: %{radio: :connecting, ssid: "Badgenet"}}
+
+      assert says?(offline, "Connect to Wi-Fi first.")
+      assert says?(offline, "not connected")
+      assert Update.handle_key({:edit, :newline}, offline) == :ignore
+    end
+
+    test "a nearly flat battery waits for a charge" do
+      flat = %{ready() | power: %{@charged | battery_mv: 3400}}
+
+      assert says?(flat, "Charge the battery first.")
+      assert Update.handle_key({:edit, :newline}, flat) == :ignore
+    end
+
+    test "USB power makes the battery level irrelevant" do
+      plugged = %{ready() | power: %{@charged | battery_mv: 3400, usb: true}}
+
+      assert Update.blocker(plugged) == nil
+    end
+
+    test "a ready badge has nothing in the way" do
+      assert Update.blocker(ready()) == nil
+    end
+  end
+
   describe "a badge without an updater" do
     test "says it needs a cable instead of offering a check" do
-      bare = %{Update.init() | updater: false}
+      bare = %{ready() | updater: false}
 
       assert says?(bare, "no updater")
       refute says?(bare, "Enter check for updates")
     end
 
     test "Enter does nothing" do
-      assert Update.handle_key({:edit, :newline}, %{Update.init() | updater: false}) == :ignore
+      assert Update.handle_key({:edit, :newline}, %{ready() | updater: false}) == :ignore
     end
   end
 
