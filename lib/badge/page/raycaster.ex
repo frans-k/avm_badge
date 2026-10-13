@@ -35,9 +35,9 @@ defmodule Badge.Page.Raycaster do
   alias Raycaster.Goat
   alias Raycaster.Omen
 
-  # The view fills what is under the title bar.
+  # The view fills the whole panel: the page is fullscreen, so there is no title bar.
   @view_w Theme.width()
-  @view_h Theme.height() - Theme.content_top()
+  @view_h Theme.height()
 
   # The most one step may move, so a long stall does not fling the player through a wall
   # in a single go. The engine's own clamp is per axis.
@@ -66,6 +66,9 @@ defmodule Badge.Page.Raycaster do
 
   @impl true
   def icon, do: :clover
+
+  @impl true
+  def chrome?(_state), do: false
 
   @impl true
   def refresh(_state), do: 100
@@ -123,18 +126,14 @@ defmodule Badge.Page.Raycaster do
 
   @impl true
   def render(%{caught: {_when, lasted}}) do
-    scene = GameOver.items(Engine.grid(), lasted, @view_w, @view_h)
-
-    shift(scene, Theme.content_top(), [])
+    GameOver.items(Engine.grid(), lasted, @view_w, @view_h)
   end
 
   def render(%{player: player, goat: goat, secs: secs}) do
     grid = Engine.grid()
     figures = Engine.sprites(grid, player, [goat_figure(goat)], @view_w, @view_h)
     walls = Engine.frame(grid, player, @view_w, @view_h)
-    scene = shift(:lists.append(figures, walls), Theme.content_top(), [])
-
-    [alive(secs) | scene]
+    [alive(secs) | :lists.append(figures, walls)]
   end
 
   defp goat_figure(goat) do
@@ -218,17 +217,6 @@ defmodule Badge.Page.Raycaster do
   defp alive(secs), do: line("alive " <> :erlang.integer_to_binary(secs) <> " s")
 
   defp line(text), do: {:text, 4, Theme.height() - 18, :default16px, Theme.fg(), Theme.bg(), text}
-
-  # The engine draws from y = 0; the title bar takes the top of the panel.
-  defp shift([], _top, acc), do: :lists.reverse(acc)
-
-  defp shift([{:rect, x, y, w, h, colour} | rest], top, acc) do
-    shift(rest, top, [{:rect, x, y + top, w, h, colour} | acc])
-  end
-
-  defp shift([{:text, x, y, font, fg, bg, text} | rest], top, acc) do
-    shift(rest, top, [{:text, x, y + top, font, fg, bg, text} | acc])
-  end
 
   defp now, do: :erlang.monotonic_time(:millisecond)
 end

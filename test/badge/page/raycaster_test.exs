@@ -79,26 +79,29 @@ defmodule Badge.Page.RaycasterTest do
   end
 
   describe "render/1" do
-    test "stays inside the content area, below the title bar" do
+    test "has no chrome, so the UI adds no title bar" do
+      refute Page.chrome?(Page.init())
+    end
+
+    test "stays on the panel" do
       items = Page.render(Page.init())
 
       assert length(items) > 1
 
       for {:rect, x, y, w, h, _colour} <- items do
         assert x >= 0 and x + w <= Theme.width()
-        assert y >= Theme.content_top() and y + h <= Theme.height()
+        assert y >= 0 and y + h <= Theme.height()
       end
     end
 
-    test "draws no background, which is the router's job" do
+    test "paints the whole panel itself, as nothing is drawn behind a fullscreen page" do
       items = Page.render(Page.init())
       rects = for {:rect, 0, y, w, h, _} <- items, w == Theme.width(), do: {y, h}
 
-      # Only the floor and ceiling span the panel, and together they fill the view only.
+      # Only the floor and ceiling span the panel, and together they fill it from the top.
       assert length(rects) == 2
-
-      assert rects |> Enum.map(fn {_y, h} -> h end) |> Enum.sum() ==
-               Theme.height() - Theme.content_top()
+      assert rects |> Enum.map(fn {_y, h} -> h end) |> Enum.sum() == Theme.height()
+      assert Enum.any?(rects, fn {y, _h} -> y == 0 end)
     end
 
     test "says how long this life has lasted" do
@@ -117,13 +120,12 @@ defmodule Badge.Page.RaycasterTest do
       assert length(near) >= length(far) + 5
     end
 
-    test "being caught shows the game over screen, inside the content area" do
+    test "being caught shows the game over screen, covering the panel" do
       items = Page.render(%{Page.init() | caught: {now(), 12}})
 
       assert Enum.any?(items, &match?({:text, _, _, _, _, _, "GAME OVER"}, &1))
 
-      for {:text, _x, y, _font, _fg, _bg, _text} <- items, do: assert(y >= Theme.content_top())
-      for {:rect, _x, y, _w, _h, _c} <- items, do: assert(y >= Theme.content_top())
+      assert Enum.any?(items, &match?({:rect, 0, 0, w, h, _} when w == 320 and h == 240, &1))
     end
   end
 
