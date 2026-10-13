@@ -12,7 +12,7 @@ defmodule Badge.Rickroll do
 
   @compile {:no_warn_undefined, :atomvm}
 
-  @dir Path.expand("../../assets/rickroll", __DIR__)
+  @dir Path.expand("../../priv/rickroll", __DIR__)
 
   # The directory itself, so adding or removing frames recompiles this module.
   @external_resource @dir
@@ -67,9 +67,9 @@ defmodule Badge.Rickroll do
   # A clock that started below zero, as the host's does, still lands on a frame.
   defp wrap(index), do: rem(rem(index, @count) + @count, @count)
 
-  # Names are fixed at compile time; the bytes come from the assets partition.
+  # Names are fixed at compile time; the bytes are mapped from the firmware's priv.
   for {file, index} <- Enum.with_index(@files) do
     name = ~c"rickroll/" ++ String.to_charlist(Path.basename(file))
-    defp frame(unquote(index)), do: :atomvm.read_priv(:assets, unquote(name))
+    defp frame(unquote(index)), do: :atomvm.read_priv(:avm_badge, unquote(name))
   end
 end

@@ -20,8 +20,8 @@ defmodule Badge.Sim do
   @doc "The repository root."
   def root, do: @root
 
-  @doc "The `assets/` directory, standing in for the assets partition."
-  def assets, do: Path.join(@root, "assets")
+  @doc "The `priv/` directory, as `:atomvm.read_priv(:avm_badge, path)` sees it."
+  def priv, do: Path.join(@root, "priv")
 
   @doc "Prints a line through `Badge.Log`, which echoes it to the console and keeps it for the Log tab."
   def log(line) do

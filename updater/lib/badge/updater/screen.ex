@@ -1,7 +1,7 @@
 defmodule Badge.Updater.Screen do
   @moduledoc """
   The updater's one screen, drawn with AtomGL's built-in font so it needs
-  nothing from the assets partition or the firmware's fonts.
+  nothing from the firmware's `priv/` or its fonts.
 
   A view is a map:
 

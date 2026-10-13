@@ -3,7 +3,7 @@ defmodule Mix.Tasks.Badge.Updater do
 
   @moduledoc """
   Builds `updater/` (its own Mix project) and writes the packbeam to the
-  `updater.avm` partition at 0x2B8000.
+  `updater.avm` partition at 0x278000.
 
       mix badge.updater               # build and flash
       mix badge.updater --build-only  # build and size-check, write nothing
@@ -16,7 +16,7 @@ defmodule Mix.Tasks.Badge.Updater do
 
   @project "updater"
   @avm "updater/badge_updater.avm"
-  @offset 0x2B8000
+  @offset 0x278000
   @limit 0x30000
 
   @impl Mix.Task

@@ -6,7 +6,7 @@ defmodule Badge.Sim.Raster do
   alias Badge.Sim.Font
 
   @fonts (for name <- [:dogica, :pixel_operator, :w95fa], into: %{} do
-            {name, Font.load(Path.expand("../../../../assets/fonts/#{name}.uf", __DIR__))}
+            {name, Font.load(Path.expand("../../../../priv/fonts/#{name}.uf", __DIR__))}
           end)
           |> Map.merge(Map.new(Badge.Icons.fonts(), fn {name, data} -> {name, Font.parse(data)} end))
 

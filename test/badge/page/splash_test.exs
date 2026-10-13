@@ -139,7 +139,7 @@ defmodule Badge.Page.SplashTest do
     end
   end
 
-  describe "without the logo in the assets partition" do
+  describe "without the logo" do
     test "the splash is not wanted, however fresh the boot" do
       refute Splash.wanted?(:esp_rst_poweron, 2_000, nil)
       assert Splash.wanted?(:esp_rst_poweron, 2_000, @image)

@@ -28,7 +28,7 @@ defmodule PackagingTest do
 
   test "every generated font is one the firmware actually loads" do
     generated =
-      Path.wildcard(Path.join(@root, "assets/fonts/*.uf"))
+      Path.wildcard(Path.join(@root, "priv/fonts/*.uf"))
       |> Enum.map(&Path.basename(&1, ".uf"))
       |> Enum.sort()
 
@@ -46,7 +46,7 @@ defmodule PackagingTest do
   @tag :regenerates_assets
   test "mkfonts.sh reproduces the committed fonts byte for byte" do
     before =
-      for f <- Path.wildcard(Path.join(@root, "assets/fonts/*.uf")),
+      for f <- Path.wildcard(Path.join(@root, "priv/fonts/*.uf")),
           into: %{},
           do: {Path.basename(f), File.read!(f)}
 
@@ -54,46 +54,28 @@ defmodule PackagingTest do
       System.cmd(Path.join(@root, "tools/mkfonts.sh"), [], cd: @root, stderr_to_stdout: true)
 
     rebuilt =
-      for f <- Path.wildcard(Path.join(@root, "assets/fonts/*.uf")),
+      for f <- Path.wildcard(Path.join(@root, "priv/fonts/*.uf")),
           into: %{},
           do: {Path.basename(f), File.read!(f)}
 
     assert before == rebuilt
   end
 
-  @tag :regenerates_assets
-  test "mix badge.assets is deterministic and packs exactly the runtime assets" do
-    run = fn ->
-      {_, 0} = System.cmd("mix", ["badge.assets"], cd: @root, stderr_to_stdout: true)
-      File.read!(Path.join(@root, "assets.avm"))
-    end
+  test "priv holds exactly the files the firmware reads at runtime" do
+    priv = Path.join(@root, "priv")
 
-    first = run.()
-    assert first == run.(), "two runs of mix badge.assets differ"
+    files =
+      Path.wildcard(Path.join(priv, "**/*.{rgba,uf}"))
+      |> Enum.map(&Path.relative_to(&1, priv))
+      |> Enum.sort()
 
-    expected =
-      Enum.map(0..15, &"assets/priv/rickroll/frame#{String.pad_leading("#{&1}", 2, "0")}@48x48.rgba") ++
-        ["assets/priv/fonts/dogica.uf",
-         "assets/priv/fonts/pixel_operator.uf",
-         "assets/priv/fonts/w95fa.uf"]
+    frames =
+      Enum.map(0..15, &"rickroll/frame#{String.pad_leading("#{&1}", 2, "0")}@48x48.rgba")
 
-    for name <- expected do
-      assert String.contains?(first, name), "archive is missing #{name}"
-    end
+    fonts = ["fonts/dogica.uf", "fonts/pixel_operator.uf", "fonts/w95fa.uf"]
+    [logo] = Path.wildcard(Path.join(priv, "logo/goatmire@*.rgba"))
 
-    refute String.contains?(first, "tengoku"),
-           "tengoku.uf was dropped in Task 4 and must not be packed"
-
-    members =
-      ~r/assets\/priv\/[a-z0-9_\/.@-]+\.(?:rgba|uf)/
-      |> Regex.scan(first)
-      |> List.flatten()
-
-    assert length(members) == length(expected),
-           "archive has #{length(members)} members, expected #{length(expected)}: #{inspect(members -- expected)}"
-
-    assert Enum.sort(members) == Enum.sort(expected),
-           "archive members do not match the expected set exactly"
+    assert files == Enum.sort(frames ++ fonts ++ [Path.relative_to(logo, priv)])
   end
 
   test "font and root licences are bundled" do

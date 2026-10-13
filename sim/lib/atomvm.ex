@@ -1,9 +1,9 @@
-# AtomVM's :atomvm module, serving the assets partition from disk.
+# AtomVM's :atomvm module, serving the firmware's priv/ from disk.
 defmodule :atomvm do
   @moduledoc false
 
-  def read_priv(:assets, path) do
-    case File.read(Path.join(Badge.Sim.assets(), to_string(path))) do
+  def read_priv(:avm_badge, path) do
+    case File.read(Path.join(Badge.Sim.priv(), to_string(path))) do
       {:ok, bytes} -> bytes
       {:error, _reason} -> :undefined
     end

@@ -33,7 +33,6 @@ Plug the badge in over USB, then:
     cd avm_badge
     mix deps.get
     mix badge.base             # once per board: bootloader, VM, boot.avm
-    mix badge.assets --flash   # once per board: fonts, icons, splash logo
     mix badge.updater          # once per board: the NervesHub updater
     mix atomvm.esp32.flash     # the firmware itself, every time
 
@@ -57,22 +56,16 @@ To get the badge online, open Settings (the diamond key), go to the WiFi tab,
 pick a network and type its passphrase. The badge remembers it. The clock,
 chat and Settings → Update all need a network.
 
-`mix badge.assets --flash` writes the assets partition, which holds the extra
-fonts, the splash logo and the rickroll frames. It is **not** updated over the
-air, so run it again whenever anything under `assets/` changes — see
-[Assets](#assets). A badge without it still boots and prints
-`Badge: no assets partition:`, it just skips the splash.
-
 Reflashing leaves NVS alone, so the profile, the badges you have collected and
 the wifi credentials all survive.
 
 ### Moving a badge from 0.1.x
 
-Firmware 0.2.0 needs base image badge-v3, which changes the flash layout (one
-1120K firmware slot and an updater instead of two 656K slots). A badge running
-0.1.x cannot get there over the air; plug it in and run all four steps above,
-in order. `mix badge.base` writes the new partition table, so the old
-firmware slots are gone afterwards. NVS is kept.
+This firmware needs the base image named in `BASE_IMAGE`, whose flash layout
+has one 1376K firmware slot and an updater instead of two 656K slots and an
+assets partition. A badge running 0.1.x cannot get there over the air; plug it
+in and run the three flashing steps above, in order. `mix badge.base` writes
+the new partition table, so the old slots are gone afterwards. NVS is kept.
 
 A 0.1.x badge that receives 0.2.0 from NervesHub still boots it, but its
 Settings → Update says the badge has no updater until it is reflashed.
@@ -180,16 +173,16 @@ nvs         data  nvs      0x9000     24K
 phy_init    data  phy      0xf000      4K
 factory     app   factory  0x10000  1920K
 boot.avm    data  phy      0x1f0000  544K
-assets.avm  data  phy      0x278000  256K
-updater.avm data  phy      0x2b8000  192K
-main.avm    data  phy      0x2e8000 1120K
+updater.avm data  phy      0x278000  192K
+main.avm    data  phy      0x2a8000 1376K
 ```
 
 `esp32init` runs `main.avm` unless NVS `atomvm/boot_path` names another pack;
 the firmware points it at `updater.avm` to install an update. Badges flashed
 before this layout (base image badge-v2 and older) had `main.avm` and `alt.avm`
-at 656K each and need a cable reflash of the base image, the updater and the
-firmware.
+at 656K each plus `assets.avm`, and need a cable reflash of the base image, the
+updater and the firmware. The fonts, logo and rickroll frames now ship inside
+the firmware's `priv/`.
 
 This table is compiled into the AtomVM image. Changing it means a serial
 reflash of every badge.
@@ -217,13 +210,15 @@ NVS included, and installs upstream AtomVM rather than this fork.
 
 Sources live in `assets/src/`. To regenerate:
 
-    tools/mkfonts.sh                    # assets/fonts/*.uf
+    tools/mkfonts.sh                    # priv/fonts/*.uf
     python3 tools/icons.py              # assets/icons/*.rgba
-    python3 tools/gif.py                # assets/rickroll/*.rgba
-    mix badge.assets                    # packs assets.avm
-    mix badge.assets --flash            # packs it and writes the partition
+    python3 tools/gif.py                # priv/rickroll/*.rgba
+    python3 tools/logo.py               # priv/logo/goatmire@*.rgba
 
-`assets.avm` is not updated over the air.
+Everything under `priv/` is packed into the firmware and read on the badge with
+`:atomvm.read_priv(:avm_badge, path)`, which maps it from flash instead of
+copying it into RAM. It ships with every firmware update. The icons are compiled
+into `Badge.Icons`.
 
 ## Advanced
 
@@ -267,5 +262,5 @@ submodules fit in. The upstream
 build system, packbeam format and NIF interface.
 
 Once built, flash the VM at `0x10000` and `boot.avm` at `0x1F0000`; both must
-come from the same build. The updater at `0x2B8000` and the application at
-`0x2E8000` survive.
+come from the same build. The updater at `0x278000` and the application at
+`0x2A8000` survive.

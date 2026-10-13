@@ -72,11 +72,11 @@ defmodule Badge.UI do
   # ago. A lost reply stops holding frames back after this long.
   @inflight_max 1_000
 
-  @font_dogica File.read!("assets/fonts/dogica.uf")
-  @font_pixel_operator File.read!("assets/fonts/pixel_operator.uf")
-  # Loaded only while a page asks for it: 18 kB is more than this badge can
-  # spare for a font used on one screen, so the bytes live in the assets
-  # partition rather than in this image.
+  # Fonts live in the firmware's `priv/`, mapped from flash by
+  # `:atomvm.read_priv/2` rather than copied. These are registered at boot.
+  @boot_fonts [dogica: ~c"fonts/dogica.uf", pixel_operator: ~c"fonts/pixel_operator.uf"]
+  # Registered only while a page asks for it: 18 kB is more than this badge
+  # can spare for a font used on one screen.
   @loadable %{w95fa: ~c"fonts/w95fa.uf"}
 
   def start_link(display) do
@@ -118,8 +118,13 @@ defmodule Badge.UI do
   def open_display(spi) do
     display = {AtomGL, AtomGL.open(spi)}
 
-    :ok = Display.register_font(display, :dogica, @font_dogica)
-    :ok = Display.register_font(display, :pixel_operator, @font_pixel_operator)
+    for {name, path} <- @boot_fonts do
+      case font_bytes(path) do
+        nil -> :io.format(~c"UI: font ~p missing from priv~n", [name])
+        bytes -> :ok = Display.register_font(display, name, bytes)
+      end
+    end
+
     for {name, bytes} <- Icons.fonts(), do: :ok = Display.register_font(display, name, bytes)
 
     :io.format(~c"UI: AtomGL port open, ~p pages~n", [length(Pages.all())])
@@ -456,7 +461,7 @@ defmodule Badge.UI do
   defp load_fonts(state, [name | rest]) do
     case font_bytes(Map.fetch!(@loadable, name)) do
       nil ->
-        :io.format(~c"UI: font ~p not in assets partition~n", [name])
+        :io.format(~c"UI: font ~p missing from priv~n", [name])
 
         load_fonts(%{state | missing: [name | state.missing]}, rest)
 
@@ -467,9 +472,12 @@ defmodule Badge.UI do
     end
   end
 
-  # An unflashed assets partition costs this one font, not the whole display.
+  # A missing font costs that font, not the whole display.
   defp font_bytes(path) do
-    :atomvm.read_priv(:assets, path)
+    case :atomvm.read_priv(:avm_badge, path) do
+      bytes when is_binary(bytes) -> bytes
+      _undefined -> nil
+    end
   catch
     _, _ -> nil
   end

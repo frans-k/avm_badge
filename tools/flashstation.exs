@@ -183,11 +183,10 @@ defmodule Flashstation.Setup do
     {"partition-table.bin", 0x8000, 0x1000},
     {"atomvm-esp32s3-badge.bin", 0x10000, 1920 * 1024},
     {"boot.avm", 0x1F0000, 544 * 1024},
-    {"assets.avm", 0x278000, 256 * 1024},
-    {"updater/badge_updater.avm", 0x2B8000, 192 * 1024},
-    {"avm_badge.avm", 0x2E8000, 1120 * 1024}
+    {"updater/badge_updater.avm", 0x278000, 192 * 1024},
+    {"avm_badge.avm", 0x2A8000, 1376 * 1024}
   ]
-  @built ["assets.avm", "updater/badge_updater.avm", "avm_badge.avm"]
+  @built ["updater/badge_updater.avm", "avm_badge.avm"]
 
   @doc "Installs what is missing and builds every artifact; returns the run options."
   def run do
@@ -201,7 +200,6 @@ defmodule Flashstation.Setup do
     Shell.say("fetching deps and building the firmware")
     Shell.run!("mix", ["deps.get"])
     Shell.run!("mix", ["atomvm.packbeam"])
-    Shell.run!("mix", ["badge.assets"])
     Shell.run!("mix", ["badge.updater", "--build-only"])
     Shell.run!("mix", ["badge.base", "--fetch-only"])
     %{provision?: provision?, images: images()}

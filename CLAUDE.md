@@ -15,8 +15,8 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
   it reads off the board. The port auto-detects; never pass `--port`
 - The check's `warning: missing atomvm dependency` is expected: the standard
   library is the fork's `boot.avm`, and the `atomvm` package would pack a
-  second copy into the 1120K slot
-- `mix atomvm.esp32.flash`, `mix badge.base` and `mix badge.assets --flash`
+  second copy into the 1376K slot
+- `mix atomvm.esp32.flash`, `mix badge.base` and `mix badge.updater`
   run esptool through Pythonx (`ExAtomVM.EsptoolHelper`), which fetches
   Python and esptool on first use; nothing needs to be on PATH
 - **Never run `mix atomvm.esp32.install` on the badge.** It erases the whole
@@ -47,24 +47,26 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
 - `boot.avm` at `0x1F0000` (544K) holds the standard libraries the VM starts
   from. Without a valid one the VM aborts before any Elixir runs — `E AtomVM:
   Invalid startup avmpack`, then a reboot loop
-- `updater.avm` at `0x2B8000` (192K) holds the updater, `updater/`, its own
+- `updater.avm` at `0x278000` (192K) holds the updater, `updater/`, its own
   Mix project. `mix badge.updater` builds and writes it; it is **not** updated
   over the air
-- `main.avm` at `0x2E8000` (1120K) holds the firmware. There is one slot and
+- `main.avm` at `0x2A8000` (1376K) holds the firmware. There is one slot and
   no rollback
-- `assets.avm` at `0x278000` holds the rickroll frames, the `.uf` fonts and
-  the splash logo, mounted by `Badge.start/0`. `mix badge.assets --flash`
-  packs and writes it; it is **not** updated over the air
+- There is no assets partition. The rickroll frames, the `.uf` fonts and the
+  splash logo live in `priv/`, packed into `main.avm` and read with
+  `:atomvm.read_priv(:avm_badge, path)`, which maps them from flash rather
+  than copying. They update over the air with the firmware
 - `python3 tools/check_partitions.py <partitions.csv> [label=path ...]` fails
   if an artifact outgrows its partition
-- `mix badge.fits` refuses to flash a `main.avm` build over 1120K
-  (0x118000 = 1,146,880 bytes); wired into `mix atomvm.esp32.flash`
-- A missing assets partition is survivable: the badge boots, prints
-  `Badge: no assets partition:` and skips the splash. `:atomvm.read_priv/2`
-  answers `:undefined` rather than raising, so a guard that only catches will
-  hand AtomGL `:undefined`
-- `dogica` and `pixel_operator` are compiled into `main.avm`, so text survives
-  a missing assets partition. `w95fa` is read from it on demand
+- `mix badge.fits` refuses to flash a `main.avm` build over 1376K
+  (0x158000 = 1,409,024 bytes); wired into `mix atomvm.esp32.flash`
+- `:atomvm.read_priv/2` answers `:undefined` for a missing file rather than
+  raising, so a guard that only catches will hand AtomGL `:undefined`
+- `dogica` and `pixel_operator` are registered with AtomGL at boot; `w95fa` is
+  registered only while a page asks for it
+- Big binaries compiled into modules (the icons, QR tables) also stay in flash,
+  but only because OTP 28+ leaves literal tables uncompressed; a compressed
+  `LitT` is inflated into RAM at load. `priv/` does not depend on that
 
 ## AtomVM is not the BEAM
 

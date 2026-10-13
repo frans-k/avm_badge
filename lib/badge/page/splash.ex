@@ -6,8 +6,8 @@ defmodule Badge.Page.Splash do
   one after another in a shuffled order, each landing with a sideways jitter
   that settles in two frames, until the whole logo is still. It holds, then
   the pieces drop out in another shuffled order, and the page hands over to
-  Home. Any key ends it early; a badge waking from deep sleep, or one without
-  the logo in its assets partition, does not show it at all.
+  Home. Any key ends it early; a badge waking from deep sleep, or one where
+  the logo cannot be read, does not show it at all.
 
   The cut and both orders come from one seed, so a frame is a pure function
   of the step and the seed and the sequence is testable on the host.
@@ -75,8 +75,7 @@ defmodule Badge.Page.Splash do
 
   @doc """
   Whether a start of the UI should show the splash, given the chip's reset
-  reason, how long it has been up and the logo, if the assets partition has
-  it. A boot does, unless it is a wake from deep sleep; a UI restart later in
+  reason, how long it has been up and the logo, if it could be read. A boot does, unless it is a wake from deep sleep; a UI restart later in
   the same boot does not, and nor does a badge with nothing to show.
   """
   @spec wanted?(atom, integer, tuple | nil) :: boolean
@@ -89,7 +88,7 @@ defmodule Badge.Page.Splash do
   defp logo do
     case Logo.image() do
       nil ->
-        :io.format(~c"Splash: no logo in assets partition~n")
+        :io.format(~c"Splash: no logo in priv~n")
 
         nil
 

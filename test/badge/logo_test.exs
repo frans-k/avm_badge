@@ -4,10 +4,10 @@ defmodule Badge.LogoTest do
   alias Badge.Logo
   alias Badge.Theme
 
-  # What the badge reads from the assets partition, standing in on the host.
+  # What the badge reads from its priv, standing in on the host.
   @image {:rgba8888, 120, 68, <<>>}
 
-  defp file, do: hd(Path.wildcard("assets/logo/goatmire@*.rgba"))
+  defp file, do: hd(Path.wildcard("priv/logo/goatmire@*.rgba"))
 
   test "the bytes in the file match the size in its name" do
     {width, height} = Logo.size()

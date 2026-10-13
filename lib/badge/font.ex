@@ -11,7 +11,7 @@ defmodule Badge.Font do
   answers `nil` for a proportional one rather than guessing.
   """
 
-  @dir Path.expand("../../assets/fonts", __DIR__)
+  @dir Path.expand("../../priv/fonts", __DIR__)
 
   @glyph_bytes 18
   @interval_bytes 12

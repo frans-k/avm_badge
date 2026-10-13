@@ -2,17 +2,17 @@ defmodule Badge.Logo do
   @moduledoc """
   The Goatmire logo, for the splash.
 
-  One `rgba8888` file in `assets/logo` named `goatmire@<width>x<height>.rgba`,
+  One `rgba8888` file in `priv/logo` named `goatmire@<width>x<height>.rgba`,
   composited onto black and fully opaque like the icons, so AtomGL draws it
   without blending. The name and size are fixed at compile time; the bytes
-  come from the assets partition, so `image/0` is `nil` on a badge without
-  one. It is stored at half size and drawn at 2x, the same trick as the
+  are mapped from the firmware's `priv`, so `image/0` is `nil` only where
+  `:atomvm.read_priv/2` has nothing to give. It is stored at half size and drawn at 2x, the same trick as the
   rickroll frames. Regenerate it with `tools/logo.py`.
   """
 
   @compile {:no_warn_undefined, :atomvm}
 
-  @dir Path.expand("../../assets/logo", __DIR__)
+  @dir Path.expand("../../priv/logo", __DIR__)
 
   @external_resource @dir
 
@@ -49,7 +49,7 @@ defmodule Badge.Logo do
   @doc "How many screen pixels one logo pixel is drawn as."
   def scale, do: @scale
 
-  @doc "The logo as an AtomGL image, read from the assets partition, or `nil` without one."
+  @doc "The logo as an AtomGL image, mapped from the firmware's priv, or `nil` without it."
   @spec image() :: {:rgba8888, pos_integer, pos_integer, binary} | nil
   def image, do: image(read())
 
@@ -59,7 +59,7 @@ defmodule Badge.Logo do
   def image(_absent), do: nil
 
   defp read do
-    :atomvm.read_priv(:assets, @name)
+    :atomvm.read_priv(:avm_badge, @name)
   catch
     _kind, _error -> :undefined
   end

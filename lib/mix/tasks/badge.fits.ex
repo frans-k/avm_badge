@@ -3,7 +3,7 @@ defmodule Mix.Tasks.Badge.Fits do
 
   @moduledoc """
   Checks `avm_badge.avm`, written by `mix atomvm.packbeam`, against the
-  1120K `main.avm` partition (0x118000 = 1_146_880 bytes).
+  1376K `main.avm` partition (0x158000 = 1_409_024 bytes).
 
       mix badge.fits
   """
@@ -11,7 +11,7 @@ defmodule Mix.Tasks.Badge.Fits do
   use Mix.Task
 
   @avm "avm_badge.avm"
-  @limit 1_146_880
+  @limit 1_409_024
 
   @impl Mix.Task
   def run(_args) do

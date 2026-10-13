@@ -7,7 +7,7 @@ cropped to its opaque bounds, box-filtered down, and composited onto black
 with every pixel opaque, which is the only path AtomGL draws without blending.
 
 Usage:
-  python3 tools/logo.py                 # assets/logo/goatmire@120xH.rgba, drawn at 2x
+  python3 tools/logo.py                 # priv/logo/goatmire@120xH.rgba, drawn at 2x
   python3 tools/logo.py --width 100 --runes 75 --gap 5
 """
 
@@ -20,7 +20,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "assets", "src", "logo")
 WORDMARK = os.path.join(SRC, "goatmire.png")
 RUNES = os.path.join(SRC, "futhark.png")
-OUT = os.path.join(ROOT, "assets", "logo")
+OUT = os.path.join(ROOT, "priv", "logo")
 
 # Space between the wordmark and the runes, in output pixels.
 GAP = 6

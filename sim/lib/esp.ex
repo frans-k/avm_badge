@@ -16,8 +16,8 @@ defmodule :esp do
 
   def partition_list do
     [
-      {"updater.avm", 1, 0x81, 0x2B8000, 0x30000, []},
-      {"main.avm", 1, 0x81, 0x2E8000, 0x118000, []}
+      {"updater.avm", 1, 0x81, 0x278000, 0x30000, []},
+      {"main.avm", 1, 0x81, 0x2A8000, 0x158000, []}
     ]
   end
 end
