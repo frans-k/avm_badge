@@ -70,6 +70,17 @@ the new partition table, so the old slots are gone afterwards. NVS is kept.
 A 0.1.x badge that receives 0.2.0 from NervesHub still boots it, but its
 Settings → Update says the badge has no updater until it is reflashed.
 
+### Exporting contacts
+
+    mix badge.contacts            # writes badge_contacts.csv
+
+reads the badges a plugged-in badge has collected out of its NVS and writes
+them to `badge_contacts.csv`, most recently met first: chip id, then every
+profile field they shared. Reading resets the badge but changes nothing on it.
+`--out` picks another file, and `--from` parses a saved NVS dump (`0x9000`,
+24K) instead of a board. The file holds other people's details, so it is
+ignored by git.
+
 ### Flashing a batch
 
     tools/flashstation.exs

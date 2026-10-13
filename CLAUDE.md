@@ -19,6 +19,9 @@ Setup, flashing and the ESP-IDF workflow are in `README.md`.
 - `mix atomvm.esp32.flash`, `mix badge.base` and `mix badge.updater`
   run esptool through Pythonx (`ExAtomVM.EsptoolHelper`), which fetches
   Python and esptool on first use; nothing needs to be on PATH
+- `mix badge.contacts` reads NVS off the board (no ESP-IDF needed: its own
+  NVS parser) and writes the collected peers to `badge_contacts.csv`, which
+  is gitignored because it holds other people's details
 - **Never run `mix atomvm.esp32.install` on the badge.** It erases the whole
   flash, NVS included, and installs upstream AtomVM. `mix badge.base` is the
   badge's equivalent

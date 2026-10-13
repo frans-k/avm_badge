@@ -25,3 +25,6 @@ mise.local.toml
 # The updater project
 /updater/_build/
 /updater/deps/
+
+# Exported by mix badge.contacts: other people's details
+/badge_contacts.csv
