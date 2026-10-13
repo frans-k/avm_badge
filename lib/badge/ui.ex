@@ -493,15 +493,23 @@ defmodule Badge.UI do
 
   defp reload(page, page_state), do: max(div(page.refresh(page_state), @base_interval), 1) - 1
 
+  # No title bar, no status read; the zero countdown reads it on the first tick back.
+  defp refresh_status(%{page: page, page_state: page_state} = state) do
+    case page.chrome?(page_state) do
+      true -> read_status_due(state)
+      false -> {state.status, 0}
+    end
+  end
+
   # Retries next tick while a source is down, rather than calling a process that is not there.
-  defp refresh_status(%{status_countdown: 0} = state) do
+  defp read_status_due(%{status_countdown: 0} = state) do
     case sources_up?() do
       true -> {read_status(), @status_ticks - 1}
       false -> {state.status, 0}
     end
   end
 
-  defp refresh_status(state), do: {state.status, state.status_countdown - 1}
+  defp read_status_due(state), do: {state.status, state.status_countdown - 1}
 
   # This process starts before Badge.Power and Badge.Wifi, and outlives a restart of either.
   defp sources_up? do
