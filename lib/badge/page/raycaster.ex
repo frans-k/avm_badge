@@ -96,12 +96,18 @@ defmodule Badge.Page.Raycaster do
       goat_shows?(old, new)
   end
 
-  defp goat_shows?(%{goat: old}, %{goat: new, player: %{x: px, y: py}}) do
-    {gx, gy, hunting} = Goat.where(new)
+  # Near before or after the move, so a goat walking out of range is erased.
+  defp goat_shows?(%{goat: old}, %{goat: new, player: player}) do
+    was = Goat.where(old)
+    now = Goat.where(new)
+
+    was != now and (near?(was, player) or near?(now, player))
+  end
+
+  defp near?({gx, gy, _hunting}, %{x: px, y: py}) do
     dx = gx - px
     dy = gy - py
-
-    dx * dx + dy * dy <= @near and Goat.where(old) != {gx, gy, hunting}
+    dx * dx + dy * dy <= @near
   end
 
   @impl true

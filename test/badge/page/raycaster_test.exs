@@ -229,6 +229,13 @@ defmodule Badge.Page.RaycasterTest do
       assert Page.changed?(old, new)
     end
 
+    test "a goat that walks out of range does, so it is erased" do
+      old = Page.init() |> with_goat({11 * 256 + 90, 384})
+      new = with_goat(old, {11 * 256 + 200, 384})
+
+      assert Page.changed?(old, new)
+    end
+
     test "the player moving, the seconds counting and a catch do" do
       old = Page.init() |> with_goat({14 * 256, 14 * 256})
 
