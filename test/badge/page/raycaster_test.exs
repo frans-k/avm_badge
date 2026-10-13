@@ -98,8 +98,8 @@ defmodule Badge.Page.RaycasterTest do
       items = Page.render(Page.init())
       rects = for {:rect, 0, y, w, h, _} <- items, w == Theme.width(), do: {y, h}
 
-      # Only the floor and ceiling span the panel, and together they fill it from the top.
-      assert length(rects) == 2
+      # Only the floor and ceiling bands span the panel, and together they fill it from the top.
+      assert length(rects) >= 2
       assert rects |> Enum.map(fn {_y, h} -> h end) |> Enum.sum() == Theme.height()
       assert Enum.any?(rects, fn {y, _h} -> y == 0 end)
     end

@@ -16,7 +16,11 @@ defmodule Raycaster.Engine do
   # time and costs the same per slice, so this is the frame rate knob: 80 slices
   # ran at 7 fps on the badge standing still, 40 at 12-13 (about 10 while
   # walking). It must divide the screen width.
-  @cols 40
+  @cols 20
+  # A face is cut in a band of its own shade for each this many rows its height changes by,
+  # at most @bands of them.
+  @band_lines 24
+  @bands 4
   @half div(@cols, 2)
   # Distance along a ray that never crosses a grid line. AtomVM's integers are
   # 28 bits wide on this chip before they spill onto the heap, so keep it
@@ -175,7 +179,7 @@ defmodule Raycaster.Engine do
     # What every column needs and none changes, in one tuple: a call only has
     # to keep a few variables alive across it, and each one costs a save and a
     # restore on this chip.
-    view = {grid, cell, in_x, in_y, dir_x, dir_y, plane_x, plane_y, column_width, height}
+    view = {grid, cell, in_x, in_y, dir_x, dir_y, plane_x, plane_y, column_width, height, width}
 
     # The first item is on top, so floor and ceiling go last, behind the walls.
     # The walls are put in front of them as they are found.
@@ -201,7 +205,8 @@ defmodule Raycaster.Engine do
     receive do
       # The right half's rectangles come nearest the seam first; the display
       # list wants the rightmost first.
-      {^ref, {right_run, right}} -> :lists.reverse(right, join(left_run, right_run, left))
+      {^ref, {right_run, right}} ->
+        :lists.reverse(right, join(left_run, right_run, view, left))
     end
   end
 
@@ -401,47 +406,184 @@ defmodule Raycaster.Engine do
     shade({colour >>> 16 &&& 255, colour >>> 8 &&& 255, colour &&& 255}, depth)
   end
 
-  # `run` is the rectangle being widened: neighbouring columns with the same
-  # height and colour (a flat wall facing you) become one rectangle. Casts
-  # columns from `i` up to or down to `stop` (by `step`, +1 or -1), and returns
-  # the rectangle still being widened along with the finished ones before it.
+  # `run` is the wall face being widened: neighbouring columns that hit the same plane of wall
+  # (the same grid line, from the same side, the same wall type) are one flat face, drawn as one
+  # polygon whose top and bottom are straight lines instead of a staircase of columns. Where
+  # the face changes between two columns, a few more rays find the pixel it changes at.
+  #
+  # A run is `{face, edge, first, last}`: `edge` is the pixel edge it began at, in the order
+  # the columns are cast, and `first` and `last` are samples `{x, top, line, dist, wall, side}`.
+  # Casts columns from `i` up to or down to `stop` (by `step`, +1 or -1), and returns the face
+  # still being widened along with the finished items before it.
   defp columns(_view, stop, stop, _step, run, acc), do: {run, acc}
 
   defp columns(view, i, stop, step, run, acc) do
-    {grid, cell, in_x, in_y, dir_x, dir_y, plane_x, plane_y, column_width, height} = view
-
-    camera = div(2 * i * 256, @cols) - 256
-    ray_x = dir_x + div(plane_x * camera, 256)
-    ray_y = dir_y + div(plane_y * camera, 256)
-
-    {wall, side, dist} = cast(grid, cell, in_x, in_y, ray_x, ray_y)
-    line = min(div(height * 256, max(dist, 1)), height)
-    top = div(height - line, 2)
-    colour = colour(wall, side, dist)
+    column_width = elem(view, 8)
+    x = i * column_width
+    {face, sample} = sample(view, x)
 
     {run, acc} =
       case run do
-        {rx, rw, ^top, ^line, ^colour} ->
-          # Going leftwards, the rectangle grows at its left edge.
-          x = if step > 0, do: rx, else: i * column_width
-          {{x, rw + column_width, top, line, colour}, acc}
+        nil ->
+          edge = if step > 0, do: x, else: x + column_width
+          {{face, edge, sample, sample}, acc}
 
-        _ ->
-          {{i * column_width, column_width, top, line, colour}, emit(run, acc)}
+        {^face, edge, first, _last} ->
+          {{face, edge, first, sample}, acc}
+
+        _other ->
+          cross(view, run, x, face, sample, acc)
       end
 
     columns(view, i + step, stop, step, run, acc)
   end
 
-  # The two rectangles meeting at the seam, one from each half: one rectangle
-  # if they match, as a single pass across the screen would have made it.
-  defp join({x, w, top, line, colour}, {_x, right_w, top, line, colour}, acc),
-    do: [{:rect, x, top, w + right_w, line, colour} | acc]
+  # The face changed between the run's last ray and the ray at `x`. The run ends at the pixel
+  # edge between them, and the pixel just past that edge says what comes next: the new face,
+  # whose run starts there, or a face too thin for the rays to have hit, which gets a run of
+  # its own up to where it ends in turn.
+  defp cross(view, {old, _edge, _first, {last_x, _, _, _, _, _}} = run, x, face, sample, acc) do
+    edge = boundary(view, old, last_x, x)
+    acc = emit(run, edge, view, acc)
+    next = if last_x < x, do: edge, else: edge - 1
 
-  defp join(left_run, right_run, acc), do: emit(right_run, emit(left_run, acc))
+    case next == x do
+      true ->
+        {{face, edge, sample, sample}, acc}
 
-  defp emit(nil, acc), do: acc
-  defp emit({x, w, y, h, colour}, acc), do: [{:rect, x, y, w, h, colour} | acc]
+      false ->
+        case sample(view, next) do
+          {^face, first} -> {{face, edge, first, sample}, acc}
+          {thin, first} -> cross(view, {thin, edge, first, first}, x, face, sample, acc)
+        end
+    end
+  end
+
+  # One ray, through the left edge of pixel column `x`.
+  defp sample(view, x) do
+    {grid, cell, in_x, in_y, dir_x, dir_y, plane_x, plane_y, _column_width, height, width} = view
+
+    camera = div(2 * x * 256, width) - 256
+    ray_x = dir_x + div(plane_x * camera, 256)
+    ray_y = dir_y + div(plane_y * camera, 256)
+
+    {wall, side, dist, hit} = cast(grid, cell, in_x, in_y, ray_x, ray_y)
+    # Not cut to the screen: the face's edges are lines through these, and a wall nearer than
+    # the screen is tall must keep its slope.
+    line = div(height * 256, max(dist, 1))
+    top = div(height - line, 2)
+
+    face =
+      if side == 0,
+        do: {0, rem(hit - 1, @size), ray_x > 0, wall},
+        else: {1, div(hit - 1, @size), ray_y > 0, wall}
+
+    {face, {x, top, line, dist, wall, side}}
+  end
+
+  # The pixel edge between `face`, seen at `from`, and something else, seen at `to`: halves
+  # the gap until it is a pixel wide. Pixels on `from`'s side of the edge are `face`.
+  defp boundary(view, face, from, to) do
+    {lo, hi} = if from < to, do: {from, to}, else: {to, from}
+    narrow(view, face, lo, hi, from < to)
+  end
+
+  defp narrow(_view, _face, lo, hi, _rising) when hi - lo <= 1, do: hi
+
+  defp narrow(view, face, lo, hi, rising) do
+    mid = div(lo + hi, 2)
+
+    case {elem(sample(view, mid), 0) == face, rising} do
+      {true, true} -> narrow(view, face, mid, hi, rising)
+      {false, true} -> narrow(view, face, lo, mid, rising)
+      {true, false} -> narrow(view, face, lo, mid, rising)
+      {false, false} -> narrow(view, face, mid, hi, rising)
+    end
+  end
+
+  # The two faces meeting at the seam, one from each half: one polygon if they are the same
+  # face, as a single pass across the screen would have made it.
+  defp join({face, left_edge, left_first, _}, {face, right_edge, right_first, _}, view, acc),
+    do: emit({face, left_edge, left_first, right_first}, right_edge, view, acc)
+
+  # Different faces: neither half cast the rays between its last one and the seam, so the edge
+  # between them is found here as it is inside a half. Carried on to the seam instead, a face
+  # that ends short of it would have its top and bottom lines meet in a point.
+  defp join(
+         {left_face, _, _, {left_x, _, _, _, _, _}} = left_run,
+         {_, _, _, {right_x, _, _, _, _, _}} = right_run,
+         view,
+         acc
+       ) do
+    edge = boundary(view, left_face, left_x, right_x)
+    emit(right_run, edge, view, emit(left_run, edge, view, acc))
+  end
+
+  # The face's top and bottom are the straight lines through its first and last samples,
+  # carried out to its edges. A face is darker the farther off it is, so a long one is cut in
+  # bands of a shade each: on a flat wall the height of the wall, and so its nearness, changes
+  # in a straight line across the screen.
+  defp emit({face, edge, first, last}, ending, view, acc) do
+    height = elem(view, 9)
+    {left, right} = if edge < ending, do: {edge, ending}, else: {ending, edge}
+    {first, last} = slope(view, face, first, last, left, right)
+    {ax, at, al, _ad, wall, side} = first
+    {bx, bt, bl, _bd, _, _} = last
+
+    if ax == bx do
+      top = max(at, 0)
+
+      [
+        {:rect, left, top, right - left, min(at + al, height) - top,
+         colour(wall, side, line_dist(al, height))}
+        | acc
+      ]
+    else
+      line = {ax, at, al, bx, bt, bl, wall, side, height}
+      lines = abs(along(ax, al, bx, bl, left) - along(ax, al, bx, bl, right))
+      n = min(max(div(lines, @band_lines), 1), @bands)
+      bands(line, left, right, n, 0, acc)
+    end
+  end
+
+  # A face only one ray hit has no slope to draw it by: a second ray, at its other end, gives
+  # it one. A face a pixel wide stays a rectangle.
+  defp slope(view, face, {x, _, _, _, _, _} = first, {x, _, _, _, _, _}, left, right)
+       when right - left >= 2 do
+    other = if x - left < right - 1 - x, do: right - 1, else: left
+
+    case sample(view, other) do
+      {^face, second} when other != x -> {first, second}
+      _ -> {first, first}
+    end
+  end
+
+  defp slope(_view, _face, first, last, _left, _right), do: {first, last}
+
+  defp bands(_line, _left, _right, n, n, acc), do: acc
+
+  defp bands(line, left, right, n, k, acc) do
+    {ax, at, al, bx, bt, bl, wall, side, height} = line
+    l = left + div((right - left) * k, n)
+    r = left + div((right - left) * (k + 1), n)
+    middle = along(ax, al, bx, bl, div(l + r, 2))
+    colour = colour(wall, side, line_dist(middle, height))
+    lt = cut(along(ax, at, bx, bt, l), height)
+    rt = cut(along(ax, at, bx, bt, r), height)
+    lb = cut(along(ax, at + al, bx, bt + bl, l), height)
+    rb = cut(along(ax, at + al, bx, bt + bl, r), height)
+    item = {:polygon, [{l, lt}, {r, rt}, {r, rb}, {l, lb}], colour}
+    bands(line, left, right, n, k + 1, [item | acc])
+  end
+
+  defp line_dist(line, height), do: div(height * 256, max(line, 1))
+
+  # Corners off the screen stay where they are, so that the edges keep their slope: AtomGL
+  # clips a polygon to the screen itself, and only wants its points within 16 bits.
+  defp cut(y, _height), do: min(max(y, -32_000), 32_000)
+
+  # The height at `x` of the line through `{ax, ay}` and `{bx, by}`.
+  defp along(ax, ay, bx, by, x), do: ay + div((by - ay) * (x - ax), bx - ax)
 
   # Digital differential analysis: hop from grid line to grid line along the
   # ray until a wall cell is entered. Returns {wall type, side hit, distance}.
@@ -488,14 +630,14 @@ defmodule Raycaster.Engine do
 
       case :erlang.element(cell, grid) do
         0 -> march(grid, cell, side_x + delta_x, side_y, delta_x, delta_y, step_x, step_y)
-        wall -> {wall, 0, side_x}
+        wall -> {wall, 0, side_x, cell}
       end
     else
       cell = cell + step_y
 
       case :erlang.element(cell, grid) do
         0 -> march(grid, cell, side_x, side_y + delta_y, delta_x, delta_y, step_x, step_y)
-        wall -> {wall, 1, side_y}
+        wall -> {wall, 1, side_y, cell}
       end
     end
   end
