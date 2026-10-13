@@ -429,8 +429,9 @@ defmodule Badge.UI do
   defp wake(state) do
     Backlight.wake()
     Pixels.wake()
+
     case Wifi.status() do
-      %{radio: :disabled} -> 
+      %{radio: :disabled} ->
         Wifi.resume()
         :io.format(~c"UI: woke up wifi. Status: ~p~n", [Wifi.status()])
     end
@@ -536,7 +537,10 @@ defmodule Badge.UI do
   end
 
   defp frame(%{page: page, page_state: page_state, status: status}) do
-    page.render(page_state) ++ Theme.chrome(page.title(), status)
+    case page.chrome?(page_state) do
+      true -> page.render(page_state) ++ Theme.chrome(page.title(), status)
+      false -> page.render(page_state)
+    end
   end
 
   defp push(%{display: display}, items) do

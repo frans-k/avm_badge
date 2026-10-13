@@ -93,6 +93,13 @@ defmodule Badge.Page do
   """
   @callback leave(state) :: :ok
 
+  @doc """
+  Whether `Badge.UI` draws the title bar and skin background under this page.
+  A page that covers the whole panel says `false`, so the hidden chrome costs
+  neither the build nor the draw.
+  """
+  @callback chrome?(state) :: boolean
+
   defmacro __using__(_opts) do
     quote do
       @behaviour Badge.Page
@@ -121,11 +128,15 @@ defmodule Badge.Page do
       @impl true
       def leave(_state), do: :ok
 
+      @impl true
+      def chrome?(_state), do: true
+
       defoverridable handle_key: 2,
                      tick: 1,
                      refresh: 1,
                      icon: 0,
                      leave: 1,
+                     chrome?: 1,
                      handle_info: 2,
                      handle_ir: 3,
                      fonts: 1
