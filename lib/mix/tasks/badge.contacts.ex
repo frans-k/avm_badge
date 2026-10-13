@@ -195,7 +195,7 @@ defmodule Mix.Tasks.Badge.Contacts do
 
   # Two bits per entry, four entries to a byte, lowest bits first.
   defp state(bitmap, i) do
-    <<_::binary-size(div(i, 4)), byte, _::binary>> = bitmap
+    byte = :binary.at(bitmap, div(i, 4))
     Bitwise.band(Bitwise.bsr(byte, rem(i, 4) * 2), 0b11)
   end
 
