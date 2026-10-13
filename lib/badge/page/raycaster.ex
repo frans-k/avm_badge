@@ -43,15 +43,13 @@ defmodule Badge.Page.Raycaster do
   # in a single go. The engine's own clamp is per axis.
   @max_dt 250
 
-  # Farther than this (squared, in the engine's fixed point: ten cells) the goat is not drawn
-  # in any way that is worth a repaint.
+  # Ten cells, squared in the engine's fixed point: a goat farther off is not worth a repaint.
   @near 10 * 256 * (10 * 256)
 
   # The goat starts in the cell farthest from where the player does, by walking.
   @goat_start {14, 14}
 
-  # How long the game over screen stays whatever is pressed, so a key held while running
-  # from the goat does not skip it.
+  # How long the game over screen ignores keys.
   @over_ms 1_500
 
   # After a catch the player is safe from the goat for this long, and the same at the start.
@@ -73,10 +71,7 @@ defmodule Badge.Page.Raycaster do
   @impl true
   def refresh(_state), do: 100
 
-  # `at` is when the player last moved, or nil while standing still. `goat` is the goat's
-  # own state and `goat_at` when it was last stepped. `born` is when this life began and
-  # `safe_until` when the goat may hunt again. `caught` is nil, or `{when, seconds lasted}`
-  # while the game over screen is up, and `dread` how much the LEDs say to dread the goat.
+  # `caught` is nil, or `{when, seconds lasted}` under the game over screen; `dread` is the LED level.
   @impl true
   def init do
     now = now()
@@ -94,9 +89,7 @@ defmodule Badge.Page.Raycaster do
     }
   end
 
-  # The goat moves every tick, but it only changes the picture when it is near enough to be
-  # in it. Without this a standing player would be repainted ten times a second for a goat
-  # on the other side of the map.
+  # A goat moving far off changes nothing drawn.
   @impl true
   def changed?(old, new) do
     old.caught != new.caught or old.player != new.player or old.secs != new.secs or
@@ -164,8 +157,7 @@ defmodule Badge.Page.Raycaster do
     if caught, do: %{state | caught: {now, div(now - born, 1000)}}, else: state
   end
 
-  # The whole seconds this life has lasted, kept in the state so that the picture only changes
-  # when the number does.
+  # The whole seconds this life has lasted, as drawn.
   defp count(%{born: born, caught: nil} = state, now), do: %{state | secs: div(now - born, 1000)}
   defp count(state, _now), do: state
 
@@ -173,8 +165,7 @@ defmodule Badge.Page.Raycaster do
   defp pace(lasted) when lasted >= @fast_after_ms, do: :fast
   defp pace(_lasted), do: :calm
 
-  # After the game over screen a key press brings the player back, once the screen has been
-  # up for a while: where the goat is not, and safe from it for a few seconds.
+  # A key after the game over screen respawns the player away from the goat, safe for a while.
   defp revive(%{goat: goat} = state, {since, _lasted}, now) do
     if now - since >= @over_ms and Keyboard.held() != [] do
       %{
@@ -191,8 +182,7 @@ defmodule Badge.Page.Raycaster do
     end
   end
 
-  # The LEDs say how near the goat is, and are told only when that changes. Level 0 gives them
-  # back to the LED mode the badge is set to.
+  # The LEDs are told only when the level changes; 0 gives them back to the LED mode.
   defp feel(%{dread: level} = state) do
     new =
       if state.caught == nil,

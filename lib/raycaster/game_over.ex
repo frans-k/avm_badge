@@ -23,6 +23,8 @@ defmodule Raycaster.GameOver do
   @goat_at 448
 
   def items(grid, survived_s, width, height) do
+    lasted = :erlang.integer_to_binary(survived_s)
+
     goat =
       Engine.sprites(
         grid,
@@ -35,7 +37,7 @@ defmodule Raycaster.GameOver do
     [
       text(width, 22, 0xFFFFFF, "GAME OVER"),
       text(width, 50, 0xFFD0D0, "The evil goat got you"),
-      text(width, height - 44, 0xFFD0D0, "You lasted #{survived_s} s"),
+      text(width, height - 44, 0xFFD0D0, "You lasted " <> lasted <> " s"),
       text(width, height - 24, 0xFFFF00, "Press any key")
     ] ++
       goat ++

@@ -14,10 +14,8 @@ defmodule Raycaster.Goat do
   cell, kept as integers like the engine's own, so a step shorter than a unit is lost: the goat
   is a few percent slower than its speeds say.
 
-  Pure, so it is checked on the laptop, and written for AtomVM: `:lists` and `:maps`, plain
-  recursion, a small random number generator of its own, and the grid handed in as an argument
-  (see `Raycaster.Engine.grid/0`). The way round a wall is the shortest through the cells,
-  looked up in `Raycaster.Routes`, which is built while compiling.
+  Pure, with the grid handed in as an argument (see `Raycaster.Engine.grid/0`). The way round
+  a wall is the shortest through the cells, from `Raycaster.Routes`.
   """
 
   import Bitwise
@@ -43,9 +41,7 @@ defmodule Raycaster.Goat do
       goal: nil,
       lost_at: nil,
       seed: rem(abs(seed), 65_537),
-      # `{from cell, goal cell, next cell}`: the last lookup in `Raycaster.Routes`, kept until
-      # the goat or its goal is in another cell. A lookup copies the whole table on AtomVM,
-      # which costs more than the few steps it is good for.
+      # `{from cell, goal cell, next cell}`: the last route, kept until either changes cell.
       way: nil
     }
   end
@@ -74,8 +70,7 @@ defmodule Raycaster.Goat do
   defp speeds(:fast), do: @fast
   defp speeds(_calm), do: @calm
 
-  # Decides what it is doing: keeps after the player while it sees them, else searches where
-  # it lost them, and then wanders.
+  # Hunts while it sees the player, then searches where it lost them, then wanders.
   defp look(goat, grid, prey, now) do
     case sees(goat, grid, prey) do
       {px, py} ->
@@ -134,15 +129,13 @@ defmodule Raycaster.Goat do
       else: wander_to(%{goat | seed: seed}, grid)
   end
 
-  # A cell from 1 to 14, the map's ring being wall, and the next seed. A small linear
-  # congruential generator, so no big integers and no :rand.
+  # A cell from 1 to 14 and the next seed, from a small LCG rather than :rand.
   defp pick(seed) do
     seed = rem(seed * 75 + 74, 65_537)
     {1 + rem(div(seed, 3), 14), seed}
   end
 
-  # Along the shortest way through the cells, a cell's middle at a time; in the goal's own cell,
-  # straight to it. Moving between the middles of neighbouring open cells never touches a wall.
+  # Cell middle to cell middle along the route, then straight to the goal in its own cell.
   defp route(goat, grid, {gx, gy}, step) do
     here = {goat.x >>> 8, goat.y >>> 8}
     {goat, next} = next_cell(goat, here, {gx >>> 8, gy >>> 8})
@@ -181,8 +174,7 @@ defmodule Raycaster.Goat do
     dx * dx + dy * dy
   end
 
-  # Integer square root by Newton's method, rounded down. It starts above any distance on the
-  # map (at most about 5,800) and comes down, which is the way it converges.
+  # Integer square root by Newton's method, from above any distance on the map.
   defp isqrt(0), do: 0
   defp isqrt(n), do: newton(n, 8_192)
 

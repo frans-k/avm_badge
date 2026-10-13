@@ -35,7 +35,7 @@ defmodule Raycaster.OmenTest do
         {ms, frames} = Omen.pattern(level)
 
         assert ms == :infinity or ms > 0
-        assert frames != []
+        assert [_ | _] = frames
 
         for frame <- frames do
           assert length(frame) == 4

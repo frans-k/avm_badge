@@ -9,8 +9,6 @@ defmodule Raycaster.EngineTest do
 
   @width 320
   @height 240
-  @ceiling 0x202838
-  @floor 0x504030
 
   # The player starts in the corner cell (1.5, 1.5), and one map cell is 256.
   @cell 256

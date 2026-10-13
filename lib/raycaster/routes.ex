@@ -2,16 +2,10 @@ defmodule Raycaster.Routes do
   @moduledoc """
   The way round walls: the first step on a shortest way from one floor cell to another.
 
-  A search over the map, a wave at a time from the goal, on the whole map at once. The map is
-  one integer with a bit for each cell (`Raycaster.Engine.open_mask/0`, 256 bits), so a wave is
-  a handful of shifts and ors, where a search over a map of cells took 400 to 600 ms on the
-  badge and froze the frames. It needs no table, and `Raycaster.Goat` asks only when it or its
-  goal changes cell.
-
-  The waves run out from the goal until one reaches `from`. The step is a neighbour of `from`
-  in the wave before, so it is one step nearer the goal; neighbours are tried east, west,
-  south, north. The outer ring of the map is wall, so a wave shifted off the side of a row
-  never lands on floor in the next.
+  The map is one integer with a bit for each cell (`Raycaster.Engine.open_mask/0`), and the
+  search runs waves out from the goal, each a few shifts and ors, until one reaches `from`.
+  The step is a neighbour of `from` in the wave before, tried east, west, south, north. The
+  map's outer ring must be wall, so a wave shifted off one side of a row never lands on floor.
   """
 
   import Bitwise
@@ -33,7 +27,7 @@ defmodule Raycaster.Routes do
       goal = 1 <<< start
 
       from_bit
-      |> waves(goal, open ^^^ goal)
+      |> waves(goal, bxor(open, goal))
       |> cell()
     end
   end
@@ -50,7 +44,7 @@ defmodule Raycaster.Routes do
     cond do
       reached == 0 -> nil
       bit?(reached, from) -> step(frontier, from)
-      true -> waves(from, reached, unseen ^^^ reached)
+      true -> waves(from, reached, bxor(unseen, reached))
     end
   end
 

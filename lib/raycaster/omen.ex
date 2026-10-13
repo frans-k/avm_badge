@@ -11,9 +11,6 @@ defmodule Raycaster.Omen do
     * 2: within four, red, purple and orange shift round them
     * 3: within two, and it is after you: a red and white strobe
     * `:caught`: steady blood red, under the game over screen
-
-  The colours are dim on purpose: four LEDs at full brightness hurt to look at, and draw a
-  lot more current.
   """
 
   # Squared, in the map's fixed point (256 to a cell), so no square root is taken.
@@ -21,8 +18,7 @@ defmodule Raycaster.Omen do
   @near 4 * 256 * (4 * 256)
   @close 2 * 256 * (2 * 256)
 
-  # A level already reached is kept until the goat is this much farther than its edge: one
-  # cell, squared, so a goat circling at an edge does not flip the LEDs on and off.
+  # A level reached is kept until the goat is a cell past its edge.
   @far_out 8 * 256 * (8 * 256)
   @near_out 5 * 256 * (5 * 256)
   @close_out 3 * 256 * (3 * 256)
