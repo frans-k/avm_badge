@@ -149,10 +149,10 @@ Firmware lives in the `avm_badge` product of the `goatmire` organization. Bump
 `version` in `mix.exs`, tag it, then build and upload the packbeam with the
 [`nh` CLI](https://github.com/nerves-hub/nh):
 
-    git tag v0.2.0 && git push origin v0.2.0
+    git tag v0.3.0 && git push origin v0.3.0
     mix atomvm.packbeam
-    cp avm_badge.avm avm_badge-0.2.0.avm
-    nh firmware upload avm_badge-0.2.0.avm --org goatmire --product avm_badge --skip-signing
+    cp avm_badge.avm avm_badge-0.3.0.avm
+    nh firmware upload avm_badge-0.3.0.avm --org goatmire --product avm_badge --skip-signing
 
 Uploading does not ship it: badges get it once a deployment group points at it
 (`nh deployment ...`, or `--deploy <group>` on the upload). The badges check
