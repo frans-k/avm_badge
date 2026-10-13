@@ -48,7 +48,8 @@ defmodule Badge.Page.Splash do
   @column_max 50
 
   # Jitter on the frame a piece lands, then the frame after, in pixels.
-  @jitter [10, 3]
+  @jitter_landing 10
+  @jitter_after 3
 
   @impl true
   def title, do: "Goatmire"
@@ -56,16 +57,25 @@ defmodule Badge.Page.Splash do
   @impl true
   def refresh(_state), do: @frame_ms
 
+  # The cover hides the whole panel, title bar included.
+  @impl true
+  def chrome?(_state), do: false
+
+  # Everything a frame can reuse is built here, once: on AtomVM each pass over
+  # the ~50 pieces costs about a millisecond a piece, so a frame only builds
+  # the few pieces that are moving. The clock starts on the first tick, not
+  # here, because the page is made while the rest of the badge is still
+  # starting and the first frame can be seconds away.
   @impl true
   def init do
-    now = :erlang.monotonic_time(:millisecond)
+    seed = rem(abs(:erlang.monotonic_time(:millisecond)), 1_000_003) + 1
 
     %{
-      started: now,
-      seed: rem(abs(now), 1_000_003) + 1,
+      started: nil,
+      seed: seed,
+      cut: prepare(seed, Logo.image()),
       step: {:in, 0},
-      done: false,
-      image: Logo.image()
+      done: false
     }
   end
 
@@ -106,6 +116,10 @@ defmodule Badge.Page.Splash do
   @impl true
   def tick(%{done: true}), do: {:goto, Home}
 
+  def tick(%{started: nil} = state) do
+    %{state | started: :erlang.monotonic_time(:millisecond), step: {:in, 0}}
+  end
+
   def tick(state) do
     elapsed = :erlang.monotonic_time(:millisecond) - state.started
 
@@ -118,8 +132,12 @@ defmodule Badge.Page.Splash do
   @impl true
   def handle_key(_event, state), do: {:ok, %{state | done: true}}
 
+  # Wi-Fi holds its radio while the splash shows; see `Badge.Wifi.release/0`.
   @impl true
-  def render(state), do: frame(state.step, state.seed, state.image)
+  def leave(_state), do: Badge.Wifi.release()
+
+  @impl true
+  def render(state), do: draw(state.step, state.cut)
 
   @doc """
   Which part of the sequence `elapsed` milliseconds falls in, and the frame within it.
@@ -137,35 +155,68 @@ defmodule Badge.Page.Splash do
 
   @doc "Display items for one step of the sequence, drawing `image`; only the cover without one."
   @spec frame({atom, non_neg_integer}, pos_integer, tuple | nil) :: [tuple]
-  def frame(_step, _seed, nil), do: [cover()]
+  def frame(step, seed, image), do: draw(step, prepare(seed, image))
 
-  def frame({:hold, _n}, _seed, image), do: [Logo.item(@x, @y, image), cover()]
+  # The pieces in landing order as a tuple, each piece's item at rest built
+  # once and kept latest-landing first, so the pieces at rest in any frame are
+  # a tail of that list and cost nothing to take, and each piece's jitter
+  # direction.
+  defp prepare(_seed, nil), do: nil
 
-  def frame({:in, n}, seed, image) do
+  defp prepare(seed, image) do
     pieces = pieces(seed)
-    count = length(pieces)
 
-    items =
-      for {piece, index} <- pieces,
-          landed = land_frame(index, count, @in_frames),
-          landed <= n,
-          do: item(piece, jitter(n - landed, seed, index), image)
-
-    items ++ [cover()]
+    %{
+      image: image,
+      count: length(pieces),
+      pieces: :erlang.list_to_tuple(for({piece, _index} <- pieces, do: piece)),
+      rest: :lists.reverse(for({piece, _index} <- pieces, do: item(piece, 0, image))),
+      signs: :erlang.list_to_tuple(for({_piece, index} <- pieces, do: sign(seed, index)))
+    }
   end
 
-  def frame({:out, n}, seed, image) do
-    pieces = pieces(seed)
-    count = length(pieces)
+  defp draw(_step, nil), do: [cover()]
+  defp draw({:hold, _n}, cut), do: [Logo.item(@x, @y, cut.image), cover()]
 
-    items =
-      for {piece, index} <- pieces,
-          gone = land_frame(count - 1 - index, count, @out_frames),
-          gone > n,
-          do: item(piece, jitter(gone - 1 - n, seed, index), image)
+  # In landing order, the pieces down by frame `n` are a prefix; those that
+  # landed in the last two frames are still jittering.
+  defp draw({:in, n}, cut) do
+    landed = landed_by(n, cut.count, @in_frames)
+    resting = landed_by(n - 2, cut.count, @in_frames)
 
-    items ++ [cover()]
+    moving(cut, resting, landed, fn index -> n - land_frame(index, cut.count, @in_frames) end) ++
+      at_rest(cut, resting) ++ [cover()]
   end
+
+  # On the way out the pieces still up are a prefix too, and those about to go
+  # jitter first.
+  defp draw({:out, n}, cut) do
+    up = still_up(n, cut.count)
+    resting = still_up(n + 2, cut.count)
+
+    moving(cut, resting, up, fn index -> gone(index, cut.count) - 1 - n end) ++
+      at_rest(cut, resting) ++ [cover()]
+  end
+
+  defp at_rest(cut, resting), do: :lists.nthtail(cut.count - resting, cut.rest)
+
+  defp moving(_cut, from, to, _age) when from >= to, do: []
+
+  defp moving(cut, from, to, age) do
+    piece = :erlang.element(from + 1, cut.pieces)
+    slide = jitter(age.(from), :erlang.element(from + 1, cut.signs))
+
+    [item(piece, slide, cut.image) | moving(cut, from + 1, to, age)]
+  end
+
+  # How many pieces, in landing order, have landed by frame `n`.
+  defp landed_by(n, _count, _frames) when n < 0, do: 0
+  defp landed_by(n, count, frames), do: min(count, div((n + 1) * count + frames - 1, frames))
+
+  # How many pieces, in landing order, are still up after frame `n` of the way out.
+  defp still_up(n, count), do: max(count - div((n + 1) * count + @out_frames - 1, @out_frames), 0)
+
+  defp gone(index, count), do: land_frame(count - 1 - index, count, @out_frames)
 
   @doc "How long the whole sequence runs, in milliseconds."
   def total_ms, do: @total_ms
@@ -195,15 +246,14 @@ defmodule Badge.Page.Splash do
   defp land_frame(index, count, frames), do: div(index * frames, count)
 
   # A push one way on landing, a smaller one back, then still.
-  defp jitter(age, seed, index) when age >= 0 and age < length(@jitter) do
+  defp jitter(0, sign), do: clamp(sign * @jitter_landing)
+  defp jitter(1, sign), do: clamp(-sign * @jitter_after)
+  defp jitter(_age, _sign), do: 0
+
+  defp sign(seed, index) do
     {roll, _next} = roll(mix(seed, index * 7 + 3))
-    sign = 1 - 2 * rem(roll, 2)
-    amount = :lists.nth(age + 1, @jitter)
-
-    clamp(sign * amount * (1 - 2 * age))
+    1 - 2 * rem(roll, 2)
   end
-
-  defp jitter(_age, _seed, _index), do: 0
 
   # A jitter must not push a piece off the panel; the margin either side is what it may use.
   defp clamp(slide), do: max(min(slide, @x), -@x)

@@ -71,11 +71,29 @@ defmodule Badge.Page.SplashTest do
       assert y > Theme.bar_h()
     end
 
-    test "pieces accumulate on the way in and are all there at the end" do
-      counts = for n <- 0..9, do: length(pieces(Splash.frame({:in, n}, @seed, @image)))
+    test "pieces accumulate on the way in and cover the whole logo at the end" do
+      {logo_w, logo_h} = Logo.size()
 
-      assert counts == Enum.sort(counts)
-      assert List.last(counts) == length(Splash.pieces(@seed))
+      areas =
+        for n <- 0..9 do
+          for(
+            {_x, _y, w, h, _cx, _cy} <- pieces(Splash.frame({:in, n}, @seed, @image)),
+            do: w * h
+          )
+          |> Enum.sum()
+        end
+
+      assert areas == Enum.sort(areas)
+      assert List.last(areas) == logo_w * 2 * logo_h * 2
+    end
+
+    test "every piece is there at the end of the way in" do
+      assert length(pieces(Splash.frame({:in, 9}, @seed, @image))) == length(Splash.pieces(@seed))
+    end
+
+    test "the clock starts on the first tick, not when the page is made" do
+      assert Splash.init().started == nil
+      assert is_integer(Splash.tick(Splash.init()).started)
     end
 
     test "pieces drop out on the way out" do
@@ -87,7 +105,8 @@ defmodule Badge.Page.SplashTest do
 
     test "a piece that landed two frames ago is at rest" do
       earlier =
-        for {_x, _y, _w, _h, cx, cy} <- pieces(Splash.frame({:in, 7}, @seed, @image)), do: {cx, cy}
+        for {_x, _y, _w, _h, cx, cy} <- pieces(Splash.frame({:in, 7}, @seed, @image)),
+            do: {cx, cy}
 
       rested =
         for {x, _y, _w, _h, cx, cy} <- pieces(Splash.frame({:in, 9}, @seed, @image)),
@@ -100,7 +119,8 @@ defmodule Badge.Page.SplashTest do
 
     test "a landing piece is jittered sideways, then still" do
       moved =
-        for n <- 0..9, {x, _y, _w, _h, cx, _cy} <- pieces(Splash.frame({:in, n}, @seed, @image)) do
+        for n <- 0..9,
+            {x, _y, _w, _h, cx, _cy} <- pieces(Splash.frame({:in, n}, @seed, @image)) do
           x - cx * 2 - home_x()
         end
 
@@ -146,7 +166,7 @@ defmodule Badge.Page.SplashTest do
     end
 
     test "a frame is just the cover, should the page be reached anyway" do
-      assert [{:rect, 0, 0, _w, _h, _bg}] = Splash.render(%{Splash.init() | image: nil})
+      assert [{:rect, 0, 0, _w, _h, _bg}] = Splash.render(%{Splash.init() | cut: nil})
     end
   end
 

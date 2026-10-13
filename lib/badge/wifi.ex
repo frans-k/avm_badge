@@ -27,6 +27,9 @@ defmodule Badge.Wifi do
 
   @sntp_host "pool.ntp.org"
 
+  # The longest the radio waits for the boot splash to let it start.
+  @splash_hold 8_000
+
   @first_backoff 1_000
   @max_backoff 30_000
 
@@ -101,6 +104,18 @@ defmodule Badge.Wifi do
   @spec resume() :: :ok
   def resume, do: GenServer.cast(__MODULE__, :resume)
 
+  @doc """
+  Lets a radio held for the boot splash start. Called as the splash leaves;
+  does nothing if the radio was not held or this process is not running.
+  """
+  @spec release() :: :ok
+  def release do
+    case Process.whereis(__MODULE__) do
+      nil -> :ok
+      wifi -> GenServer.cast(wifi, :release_radio)
+    end
+  end
+
   @doc "Title bar icon for a radio state."
   @spec icon(atom) :: atom
   def icon(:connected), do: :wifi
@@ -140,15 +155,37 @@ defmodule Badge.Wifi do
       scanning: false,
       networks: [],
       scan_id: 0,
-      pending: nil
+      pending: nil,
+      held: false
     }
 
     {:ok, state, {:continue, :start_radio}}
   end
 
-  # Starts the radio after init/1 returns, not during it.
+  # Starts the radio after init/1 returns, not during it. Starting it costs
+  # the boot splash half its frames, so while the splash shows the radio waits
+  # for `release/0`, or for `@splash_hold` should the release never come.
   @impl true
   def handle_continue(:start_radio, state) do
+    case splashing?() do
+      true ->
+        Process.send_after(self(), :release_radio, @splash_hold)
+        {:noreply, %{state | held: true}}
+
+      false ->
+        start_radio(state)
+    end
+  end
+
+  # The same question `Badge.UI` asks to pick its first page, so the two agree
+  # without calling each other while both are starting.
+  defp splashing? do
+    Badge.Page.Splash.wanted?()
+  catch
+    _kind, _reason -> false
+  end
+
+  defp start_radio(state) do
     case credentials() do
       nil ->
         :io.format(~c"Wifi: no credentials in NVS, radio stays off~n")
@@ -228,6 +265,9 @@ defmodule Badge.Wifi do
     {:noreply, %{state | radio: :disabled, ip: nil, ssid: nil, pending: nil, attempts: 0}}
   end
 
+  def handle_cast(:release_radio, %{held: true} = state), do: start_radio(%{state | held: false})
+  def handle_cast(:release_radio, state), do: {:noreply, state}
+
   def handle_cast(:resume, %{ssid: nil} = state), do: {:noreply, state}
   def handle_cast(:resume, %{radio: radio} = state) when radio != :disabled, do: {:noreply, state}
 
@@ -240,6 +280,9 @@ defmodule Badge.Wifi do
   end
 
   @impl true
+  def handle_info(:release_radio, %{held: true} = state), do: start_radio(%{state | held: false})
+  def handle_info(:release_radio, state), do: {:noreply, state}
+
   def handle_info(:connected, state) do
     :io.format(~c"Wifi: associated~n")
 
